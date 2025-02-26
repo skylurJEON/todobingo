@@ -30,6 +30,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 8,
     backgroundColor: '#fff',
+    
   },
   completedCell: { backgroundColor: '#4F46E5' },
   text: { fontSize: 12, textAlign: 'center' },

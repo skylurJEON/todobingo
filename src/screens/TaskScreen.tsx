@@ -39,6 +39,7 @@ export default function TaskScreen() {
           onChangeText={setInput}
           placeholder="할 일을 입력하세요"
           style={styles.input}
+          
         />
         <TouchableOpacity onPress={addTask} style={styles.addButton}>
           <Text style={styles.addButtonText}>추가</Text>
