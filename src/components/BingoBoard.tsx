@@ -5,6 +5,17 @@ import { tasksAtom, Task } from '../atoms/tasksAtom';
 import { bingoSizeAtom } from '../atoms/bingoSettingsAtom';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LinearGradient from 'react-native-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import TaskModal from './TaskModal';
+import { StackNavigationProp } from '@react-navigation/stack';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+// 네비게이션 타입 정의
+type RootStackParamList = {
+    Home: undefined;
+    TimerScreen: { task: Task | null; onComplete: () => void };
+  };
+  
+  type NavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
 interface BingoCellProps {
   title: string;
@@ -12,6 +23,7 @@ interface BingoCellProps {
   onPress: () => void;
   onLongPress: (title: string) => void;
 }
+
 
 function BingoCell({ title, completed, onPress, onLongPress }: BingoCellProps) {
     const wobbleAnim = useRef(new Animated.Value(0)).current;
@@ -111,9 +123,12 @@ export default function BingoBoard() {
   const bingoSize = useRecoilValue(bingoSizeAtom);
   const [bingoBoard, setBingoBoard] = useState<Task[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [taskModalVisible, setTaskModalVisible] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{id: number, title: string}>({id: 0, title: ''});
   const [editText, setEditText] = useState('');
   const [praiseModalVisible, setPraiseModalVisible] = useState(false);
+  const navigation = useNavigation<NavigationProp>();
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const totalCells = bingoSize * bingoSize;
   const centerIndex = Math.floor(totalCells / 2);
@@ -161,7 +176,7 @@ export default function BingoBoard() {
         cell.id === id ? { ...cell, completed: !cell.completed } : cell
       )
     );
-    if (id !== 9999) { // ✅ '칭찬하기'도 선택 가능하지만 수정 금지
+    if (id !== 9999) { //  '칭찬하기'도 선택 가능하지만 수정 금지
         setTasks((prev) =>
           prev.map((task) =>
             task.id === id ? { ...task, completed: !task.completed } : task
@@ -176,9 +191,17 @@ export default function BingoBoard() {
       return;
     }
     
-    setSelectedCell({id, title});
-    setEditText(title);
-    setModalVisible(true);
+    // 해당 task 찾기
+    const task = bingoBoard.find(task => task.id === id);
+    if (task) {
+      setSelectedTask(task);
+      setTaskModalVisible(true); // TaskModal 열기
+    } else {
+      // 기존 수정 모달 열기
+      setSelectedCell({id, title});
+      setEditText(title);
+      setModalVisible(true);
+    }
   };
 
   const saveEdit = () => {
@@ -199,6 +222,49 @@ export default function BingoBoard() {
     setModalVisible(false);
   };
 
+  const openTaskModal = (task: Task) => {
+    setSelectedTask(task);
+    setTaskModalVisible(true);
+  };
+
+  const handleTimerComplete = () => {
+    if (selectedTask) {
+      // 할 일 자동 완료 처리
+      console.log(`${selectedTask.title} 완료됨!`);
+      
+      // 상태 업데이트
+      setBingoBoard((prev) =>
+        prev.map((cell) =>
+          cell.id === selectedTask.id ? { ...cell, completed: true } : cell
+        )
+      );
+      
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === selectedTask.id ? { ...task, completed: true } : task
+        )
+      );
+      
+      setSelectedTask(null);
+    }
+  };
+
+  const handleSaveTask = (text: string) => {
+    if (selectedTask) {
+      setBingoBoard((prev) =>
+        prev.map((cell) =>
+          cell.id === selectedTask.id ? { ...cell, title: text } : cell
+        )
+      );
+      
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === selectedTask.id ? { ...task, title: text } : task
+        )
+      );
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={[styles.board, { width: (70 + 8) * bingoSize }]}>
@@ -214,73 +280,59 @@ export default function BingoBoard() {
       </View>
 
       {/* 모달 컴포넌트 */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Animated.View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>할 일 수정</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={editText}
-              onChangeText={setEditText}
-              multiline
-              placeholder="할 일을 입력하세요"
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.cancelButton]} 
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.buttonText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.saveButton]} 
-                onPress={saveEdit}
-              >
-                <Text style={styles.buttonText}>저장</Text>
-              </TouchableOpacity>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
+      
+
+      
+      <TaskModal
+        visible={taskModalVisible}
+        onClose={() => setTaskModalVisible(false)}
+        onStartTimer={() => {
+          setTaskModalVisible(false);
+          navigation.navigate('TimerScreen', { task: selectedTask, onComplete: handleTimerComplete });
+        }}
+        task={selectedTask}
+        onSave={handleSaveTask}
+      />
 
       {/* 칭찬하기 전용 모달 */}
       <Modal
-        animationType="fade"
-        transparent={true}
-        visible={praiseModalVisible}
-        onRequestClose={() => setPraiseModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Animated.View style={styles.modalContainer}>
-            <Text style={styles.modalTitle}>칭찬하기</Text>
-            <View style={styles.praiseContent}>
-              <Text style={styles.praiseText}>
-                칭찬하기는 꼭 해주세요. 거울 속 나 자신에게 칭찬해도 좋아요.
-              </Text>
-              <LinearGradient
-                colors={['#8EB69B', '#235347']}
-                locations={[0.2, 1]}
-                start={{ x: 0, y: 1 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.praiseIcon}
-              >
-                <Text style={styles.praiseIconText}>♥</Text>
-              </LinearGradient>
-            </View>
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.saveButton, {marginTop: 16}]} 
-              onPress={() => setPraiseModalVisible(false)}
-            >
-              <Text style={styles.buttonText}>확인</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-      </Modal>
+  animationType="fade"
+  transparent={true}
+  visible={praiseModalVisible}
+  onRequestClose={() => setPraiseModalVisible(false)}
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalContainer}>
+      <Text style={styles.modalTitle}>칭찬은 수정이 안돼요</Text>
+      <View style={styles.praiseContent}>
+        <Text style={styles.praiseText}>거울속 자신에게 칭찬 한마디도 충분해요!</Text>
+        <LinearGradient
+          colors={['#8EB69B', '#235347']}
+          style={styles.praiseIcon}
+        >
+          <Ionicons name="heart" size={24} color="white" />
+        </LinearGradient>
+      </View>
+      <View style={styles.modalButtons}>
+        <TouchableOpacity 
+          style={[styles.modalButton, styles.cancelButton]} 
+          onPress={() => setPraiseModalVisible(false)}
+        >
+          <Text style={styles.buttonText}>닫기</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.modalButton, styles.saveButton]} 
+          onPress={() => {
+            toggleTaskCompletion(9999);
+            setPraiseModalVisible(false);
+          }}
+        >
+          <Text style={styles.buttonText}>완료</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </View>
+</Modal>
     </View>
   );
 }

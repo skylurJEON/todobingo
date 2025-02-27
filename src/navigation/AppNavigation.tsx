@@ -1,13 +1,26 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer } from "@react-navigation/native";
+import { createStackNavigator } from "@react-navigation/stack";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
 import HomeScreen from "../screens/HomeScreen";
 import TaskScreen from "../screens/TaskScreen";
 import RankScreen from "../screens/RankScreen";
 import SettingScreen from "../screens/SettingScreen";
+import TimerScreen from "../screens/TimerScreen";
 
 const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
+
+// 홈 스크린과 타이머 스크린을 포함하는 스택 네비게이터
+function HomeStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="HomeScreen" component={HomeScreen} />
+      <Stack.Screen name="TimerScreen" component={TimerScreen} />
+    </Stack.Navigator>
+  );
+}
 
 export const AppNavigation = () => {
   return (
@@ -21,12 +34,9 @@ export const AppNavigation = () => {
             elevation: 8,
             shadowColor: '#000',
             borderColor: '#111',
-            
           },
- 
           tabBarActiveTintColor: '#8EB69B',
           tabBarInactiveTintColor: '#fff',
-
           tabBarIcon: ({ focused, color, size }) => {
             let iconName: string;
 
@@ -42,10 +52,8 @@ export const AppNavigation = () => {
           },
         })}
       >
-        
-    
         <Tab.Screen name="Rank" component={RankScreen} options={{title:'랭킹'}} />
-        <Tab.Screen name="Home" component={HomeScreen} options={{title:'홈'}} />
+        <Tab.Screen name="Home" component={HomeStack} options={{title:'홈'}} />
         <Tab.Screen name="Setting" component={SettingScreen} options={{title:'설정'}} />
       </Tab.Navigator>
     </NavigationContainer>
