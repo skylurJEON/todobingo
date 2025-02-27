@@ -1,63 +1,88 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { useRecoilState } from 'recoil';
+import { useRecoilState, useRecoilValue } from 'recoil';
 import { tasksAtom, Task } from '../atoms/tasksAtom';
+import { bingoSizeAtom } from '../atoms/bingoSettingsAtom';
+import { loadTasks, saveTasks } from '../services/taskService';
 
 export default function TaskScreen() {
   const [tasks, setTasks] = useRecoilState(tasksAtom);
+  const bingoSize = useRecoilValue(bingoSizeAtom);
   const [input, setInput] = useState('');
 
-  const addTask = () => {
-    if (!input.trim()) return;
+  const totalTasks = bingoSize * bingoSize; // 칭찬하기 포함
+  const editableTasksCount = totalTasks - 1; // 사용자가 추가할 수 있는 최대 할 일 수
 
-    if (tasks.length >= 16) {
-      Alert.alert('빙고판 가득참', '더 이상 할 일을 추가할 수 없습니다.');
+  useEffect(() => {
+    const fetchTasks = async () => {
+      const savedTasks = await loadTasks(bingoSize);
+
+      const trimmedTasks = savedTasks.slice(0, editableTasksCount); // 초과 시 자르기
+      const emptyTasksNeeded = editableTasksCount - trimmedTasks.length;
+
+      const updatedTasks = [
+        ...trimmedTasks,
+        ...Array.from({ length: emptyTasksNeeded }, (_, i) => ({
+          id: -(i + 1),
+          title: '',
+          completed: false,
+        })),
+      ];
+
+      setTasks(updatedTasks);
+    };
+
+    fetchTasks();
+  }, [bingoSize]);
+
+  useEffect(() => {
+    saveTasks(bingoSize, tasks);
+  }, [tasks]);
+
+  
+
+  const startEditing = (task: Task) => {
+    if (task.title === '칭찬하기') {
+      Alert.alert('알림', '칭찬하기는 꼭 해주세요. 거울 속 나 자신에게 칭찬해도 좋아요.');
       return;
     }
 
-    const newTask: Task = { id: Date.now(), title: input, completed: false };
-    setTasks((prev) => [...prev, newTask]); // tasksAtom에 추가하면 자동으로 BingoBoard 반영
-    setInput('');
-  };
-
-  const toggleTask = (id: number) => {
-    setTasks((prev) =>
-      prev.map((task) => (task.id === id ? { ...task, completed: !task.completed } : task))
+    Alert.prompt(
+      '할 일 수정',
+      '새로운 내용을 입력하세요',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '저장',
+          onPress: (text) => {
+            if (text?.trim()) {
+              setTasks((prev) =>
+                prev.map((t) => (t.id === task.id ? { ...t, title: text.trim() } : t))
+              );
+            }
+          },
+        },
+      ],
+      'plain-text',
+      task.title
     );
-  };
-
-  const deleteTask = (id: number) => {
-    setTasks((prev) => prev.filter((task) => task.id !== id));
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>할 일 목록</Text>
-      <View style={styles.inputContainer}>
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder="할 일을 입력하세요"
-          style={styles.input}
-          
-        />
-        <TouchableOpacity onPress={addTask} style={styles.addButton}>
-          <Text style={styles.addButtonText}>추가</Text>
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.title}>할 일 목록 ({tasks.filter((t) => t.title).length}/{editableTasksCount})</Text>
+      
 
       <FlatList
-        data={tasks}
+        data={[...tasks, { id: 9999, title: '칭찬하기', completed: false }]}
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <View style={styles.taskItem}>
-            <TouchableOpacity onPress={() => toggleTask(item.id)}>
-              <Text style={[styles.taskText, item.completed && styles.completedText]}>
-                {item.title}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => deleteTask(item.id)}>
-              <Text style={styles.deleteText}>삭제</Text>
+            <Text style={[styles.taskText, item.completed && styles.completedText]}>
+              {item.title || '빈 칸'}
+            </Text>
+            <TouchableOpacity onPress={() => startEditing(item)} style={styles.editButton}>
+              <Text style={styles.editButtonText}>수정</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -68,58 +93,16 @@ export default function TaskScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    padding: 16, 
-    backgroundColor: '#F9FAFB' 
-  },
-  title: { 
-    marginTop: 24, 
-    fontSize: 24, 
-    fontWeight: 'bold', 
-    marginBottom: 16, 
-    textAlign: 'center' 
-  },
-  inputContainer: { 
-    flexDirection: 'row', 
-    marginBottom: 16 
-  },
-  input: { 
-    flex: 1, 
-    borderWidth: 1, 
-    borderColor: '#ccc', 
-    borderRadius: 8, 
-    paddingHorizontal: 12 
-  },
-  addButton: { 
-    backgroundColor: '#4F46E5', 
-    paddingHorizontal: 16, 
-    justifyContent: 'center', 
-    marginLeft: 8, 
-    borderRadius: 8 
-  },
-  addButtonText: { 
-    color: '#fff', 
-    fontWeight: 'bold' 
-  },
-  taskItem: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 12 
-  },
-  taskText: { 
-    fontSize: 16 
-  },
-  completedText: { 
-    textDecorationLine: 'line-through', 
-    color: 'gray' 
-  },
-  deleteText: { 
-    color: 'red' 
-  },
-  emptyText: { 
-    textAlign: 'center', 
-    color: 'gray' 
-  },
+  container: { flex: 1, padding: 16, backgroundColor: '#F9FAFB' },
+  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
+  inputContainer: { flexDirection: 'row', marginBottom: 16 },
+  input: { flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 12 },
+  addButton: { backgroundColor: '#4F46E5', paddingHorizontal: 16, justifyContent: 'center', marginLeft: 8, borderRadius: 8 },
+  addButtonText: { color: '#fff', fontWeight: 'bold' },
+  taskItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  taskText: { fontSize: 16 },
+  completedText: { textDecorationLine: 'line-through', color: 'gray' },
+  editButton: { backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
+  editButtonText: { color: '#fff', fontWeight: 'bold' },
+  emptyText: { textAlign: 'center', color: 'gray' },
 });

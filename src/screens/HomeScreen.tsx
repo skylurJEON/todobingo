@@ -15,8 +15,9 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    //backgroundColor: '#F9FAFB' 
+    backgroundColor: '#050505' 
     //backgroundColor: 'red',
+    
   },
   boardContainer: {
     flex: 1,
@@ -24,6 +25,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     //backgroundColor: 'blue',
-    
+
   },
 });

@@ -15,6 +15,18 @@ export const AppNavigation = () => {
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,
+          tabBarStyle: {
+            backgroundColor: 'black',
+            borderTopWidth: 1,
+            elevation: 8,
+            shadowColor: '#000',
+            borderColor: '#111',
+            
+          },
+ 
+          tabBarActiveTintColor: '#8EB69B',
+          tabBarInactiveTintColor: '#fff',
+
           tabBarIcon: ({ focused, color, size }) => {
             let iconName: string;
 
@@ -25,15 +37,15 @@ export const AppNavigation = () => {
               case 'Setting': iconName = focused ? 'settings' : 'settings-outline'; break;
               default: iconName = 'ellipse';
             }
-
-            return <Ionicons name={iconName as any} size={size} color={color} />;
+            
+            return <Ionicons name={iconName as any} size={20} color={color} />;
           },
         })}
       >
-        <Tab.Screen name="Home" component={HomeScreen} />
-        <Tab.Screen name="Task" component={TaskScreen} />
-        <Tab.Screen name="Rank" component={RankScreen} />
-        <Tab.Screen name="Setting" component={SettingScreen} />
+        <Tab.Screen name="Home" component={HomeScreen} options={{title:'홈'}} />
+        <Tab.Screen name="Task" component={TaskScreen} options={{title:'할일'}} />
+        <Tab.Screen name="Rank" component={RankScreen} options={{title:'랭킹'}} />
+        <Tab.Screen name="Setting" component={SettingScreen} options={{title:'설정'}} />
       </Tab.Navigator>
     </NavigationContainer>
   );
