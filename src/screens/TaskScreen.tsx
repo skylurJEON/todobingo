@@ -4,6 +4,7 @@ import { useRecoilState, useRecoilValue } from 'recoil';
 import { tasksAtom, Task } from '../atoms/tasksAtom';
 import { bingoSizeAtom } from '../atoms/bingoSettingsAtom';
 import { loadTasks, saveTasks } from '../services/taskService';
+import LinearGradient from 'react-native-linear-gradient';
 
 export default function TaskScreen() {
   const [tasks, setTasks] = useRecoilState(tasksAtom);
@@ -70,7 +71,7 @@ export default function TaskScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>할 일 목록 ({tasks.filter((t) => t.title).length}/{editableTasksCount})</Text>
+      <Text style={styles.title}>할 일 목록</Text>
       
 
       <FlatList
@@ -78,31 +79,96 @@ export default function TaskScreen() {
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <View style={styles.taskItem}>
-            <Text style={[styles.taskText, item.completed && styles.completedText]}>
-              {item.title || '빈 칸'}
-            </Text>
-            <TouchableOpacity onPress={() => startEditing(item)} style={styles.editButton}>
-              <Text style={styles.editButtonText}>수정</Text>
-            </TouchableOpacity>
+            <LinearGradient
+              colors={item.completed ? ['#8EB69B','#235347'] : ['#235347','#8EB69B']}
+              locations={[0.2, 1]}
+              start={{ x: 0, y: 1 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.taskCard, item.completed && styles.completedTaskCard]}
+            >
+              <Text style={[styles.taskText, item.completed && styles.completedText]}>
+                {item.title || '빈 칸'}
+              </Text>
+              <TouchableOpacity 
+                onPress={() => startEditing(item)} 
+                style={styles.editButton}
+              >
+                <Text style={styles.editButtonText}>수정</Text>
+              </TouchableOpacity>
+            </LinearGradient>
           </View>
         )}
-        ListEmptyComponent={<Text style={styles.emptyText}>할 일을 추가해보세요!</Text>}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#F9FAFB' },
-  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-  inputContainer: { flexDirection: 'row', marginBottom: 16 },
-  input: { flex: 1, borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 12 },
-  addButton: { backgroundColor: '#4F46E5', paddingHorizontal: 16, justifyContent: 'center', marginLeft: 8, borderRadius: 8 },
-  addButtonText: { color: '#fff', fontWeight: 'bold' },
-  taskItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  taskText: { fontSize: 16 },
-  completedText: { textDecorationLine: 'line-through', color: 'gray' },
-  editButton: { backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
-  editButtonText: { color: '#fff', fontWeight: 'bold' },
-  emptyText: { textAlign: 'center', color: 'gray' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#051F20',
+    alignItems: 'center',
+  },
+  title: { 
+    fontSize: 20, 
+    fontWeight: '500', 
+    marginTop: '15%',
+    marginBottom: 16, 
+    textAlign: 'center', 
+    color: '#fff' 
+  },
+  taskItem: { 
+    
+    width: '100%',
+    height: 40,
+    marginBottom: 12, 
+    borderRadius: 16, 
+    //overflow: 'hidden', 
+    //shadowColor: '#000', 
+    //shadowOffset: { width: 0, height: 2 }, 
+    //shadowOpacity: 0.1, 
+    //shadowRadius: 4, 
+    //elevation: 3 
+  },
+  taskCard: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    
+    //borderWidth: 1,
+    //borderColor: 'red',
+    borderRadius: 16,
+    //padding: 10,
+  },
+  completedTaskCard: {
+    
+  },
+  taskText: { 
+    fontSize: 15,
+    textAlign: 'center', 
+    color: '#fff', 
+    fontWeight: '400',
+    //padding: 10,
+    paddingLeft: 20,
+    paddingRight: '60%',
+    //flex: 1 
+  },
+  completedText: { 
+    color: '#fff', 
+    fontWeight: 'bold' 
+  },
+  editButton: { 
+    backgroundColor: '#0B2B26', 
+    paddingHorizontal: 12, 
+    paddingVertical: 6, 
+    height: '100%',
+    //borderRadius: 16, 
+    marginLeft: 8,
+  },
+  editButtonText: {
+    textAlign: 'center',
+    color: '#fff', 
+    fontWeight: 'bold' 
+  },
+  
 });

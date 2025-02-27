@@ -32,7 +32,7 @@ export const AppNavigation = () => {
 
             switch (route.name) {
               case 'Home': iconName = focused ? 'home' : 'home-outline'; break;
-              case 'Task': iconName = focused ? 'people' : 'people-outline'; break;
+              //case 'Task': iconName = focused ? 'people' : 'people-outline'; break;
               case 'Rank': iconName = focused ? 'trophy' : 'trophy-outline'; break;
               case 'Setting': iconName = focused ? 'settings' : 'settings-outline'; break;
               default: iconName = 'ellipse';
@@ -42,9 +42,10 @@ export const AppNavigation = () => {
           },
         })}
       >
-        <Tab.Screen name="Home" component={HomeScreen} options={{title:'홈'}} />
-        <Tab.Screen name="Task" component={TaskScreen} options={{title:'할일'}} />
+        
+    
         <Tab.Screen name="Rank" component={RankScreen} options={{title:'랭킹'}} />
+        <Tab.Screen name="Home" component={HomeScreen} options={{title:'홈'}} />
         <Tab.Screen name="Setting" component={SettingScreen} options={{title:'설정'}} />
       </Tab.Navigator>
     </NavigationContainer>
