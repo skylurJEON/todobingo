@@ -64,6 +64,7 @@ const MainTabs = () => {
   
   return (
     <Tab.Navigator
+      initialRouteName="Home"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: {

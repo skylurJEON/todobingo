@@ -153,7 +153,7 @@ export default function RankScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#050505',
     padding: 16,
   },
   loadingContainer: {

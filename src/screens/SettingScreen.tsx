@@ -245,7 +245,9 @@ const styles = StyleSheet.create({
   },
   bingoSizeContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'flex-start',
+    gap: 10,
+    marginBottom: 16,
   },
   sizeButton: {
     backgroundColor: '#333',
@@ -263,7 +265,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   profileContainer: {
@@ -374,7 +376,7 @@ const styles = StyleSheet.create({
   },
   languageButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: 'bold',
   },
   selectedLanguageButton: {

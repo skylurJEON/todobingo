@@ -5,6 +5,7 @@ import { useRecoilValue } from 'recoil';
 import { scoreAtom } from '../atoms/scoreAtom';
 import LinearGradient from 'react-native-linear-gradient';
 import { useTranslation } from 'react-i18next';
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 
 export default function HomeScreen() {
   const scoreState = useRecoilValue(scoreAtom);
@@ -15,16 +16,22 @@ export default function HomeScreen() {
       <View style={styles.statsContainer}>
         <View style={styles.scoreBox}>
             <Text style={styles.scoreValue}>  {scoreState.totalScore}
-                <Text style={styles.scoreLabel}>  {t('common.points')}</Text>
+                <Text style={styles.dayText}> {t('common.points')}</Text>
             </Text>
         </View>
         <View style={styles.streakBox}>
            <Text style={styles.scoreLabel}>  
             <Text style={styles.scoreValue}>  {scoreState.streak}</Text>
-            <Text style={styles.dayText}>  {t('common.day')}</Text></Text>
+            <Text style={styles.dayText}> {t('common.day')}</Text></Text>
         </View>
       </View>
       <BingoBoard />
+      <View style={styles.bannerContainer}>
+        {/* <BannerAd
+          unitId={TestIds.BANNER}
+          size={BannerAdSize.FULL_BANNER}
+        /> */}
+      </View>
     </View>
   );
 }
@@ -68,8 +75,8 @@ const styles = StyleSheet.create({
 
 
   scoreValue: {
-    fontSize: 38,
-    fontWeight: '400',
+    fontSize: 30,
+    fontWeight: '300',
     color: '#8EB69B',
   },
 
@@ -79,11 +86,18 @@ const styles = StyleSheet.create({
   streakText: {
     color: '#fff',
     fontWeight: '400',
-    fontSize: 12,
+    fontSize: 10,
   },        
   dayText: {
     color: '#DAF1DE',
     fontWeight: '400',
-    fontSize: 16,
+    fontSize: 14,
+  },
+
+  bannerContainer: {
+    marginTop: 10,
+    marginBottom: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
