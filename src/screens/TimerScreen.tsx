@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
+
 export default function TimerScreen({ route, navigation }: { route: any, navigation: any }) {
   const { task, onComplete } = route.params;
-  
+  const { t } = useTranslation();
   // 타이머 시간 옵션 (초 단위)
   const timeOptions = [
-    { label: '1분', value: 10 },
-    { label: '5분', value: 5 * 60 },
-    { label: '10분', value: 10 * 60 },
+    { label: '1'+t('timer.time_options'), value: 60 },
+    { label: '5'+t('timer.time_options'), value: 5 * 60 },
+    { label: '10'+t('timer.time_options'), value: 10 * 60 },
   ];
   
   // 선택된 시간 (기본값: 아직 선택 안함)
@@ -18,6 +20,11 @@ export default function TimerScreen({ route, navigation }: { route: any, navigat
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   // 타이머 실행 중 여부
   const [isRunning, setIsRunning] = useState(false);
+
+  // 스톱워치 모드 여부
+  const [isStopwatchMode, setIsStopwatchMode] = useState(false);
+  // 스톱워치 시간
+  const [stopwatchTime, setStopwatchTime] = useState(0);
 
   // 타이머 시작 함수
   const startTimer = (seconds: number) => {
@@ -49,8 +56,21 @@ export default function TimerScreen({ route, navigation }: { route: any, navigat
       });
     }, 1000);
 
+
+
     return () => clearInterval(timer);
   }, [isRunning, timeLeft]);
+
+  // 스톱워치 실행 효과
+  useEffect(() => {
+    if (!isStopwatchMode) return ;
+
+    const stopwatch = setInterval(() => {
+      setStopwatchTime((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(stopwatch);
+  }, [isStopwatchMode]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -62,14 +82,27 @@ export default function TimerScreen({ route, navigation }: { route: any, navigat
     <View style={styles.container}>
         <View style={styles.backButtonContainer}>
             <TouchableOpacity onPress={() => {
-              if (isRunning) {
-                // 타이머 실행 중일 때 확인 메시지 표시
+              if (isRunning || isStopwatchMode) {
+                // 타이머나 스톱워치 실행 중일 때 확인 메시지 표시
                 Alert.alert(
-                  '타이머 중단',
-                  '정말 타이머를 중단하시겠습니까?',
+                  isRunning ? t('timer.stop') : t('timer.stop'),
+                  isRunning ? t('timer.confirm_stop_timer') : t('timer.confirm_stop_stopwatch'),
                   [
-                    { text: '취소', style: 'cancel' },
-                    { text: '중단', onPress: () => navigation.goBack() }
+                    { text: t('common.cancel'), style: 'cancel' },
+                    { 
+                      text: t('timer.stop'), 
+                      onPress: () => {
+                        if (isStopwatchMode) {
+                          // 스톱워치 모드에서는 완료 처리
+                          setTimeout(() => {
+                            if (task) {
+                              onComplete();
+                            }
+                          }, 0);
+                        }
+                        navigation.goBack() 
+                      }
+                    }
                   ]
                 );
               } else {
@@ -79,12 +112,12 @@ export default function TimerScreen({ route, navigation }: { route: any, navigat
                 <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>
         </View>
-      <Text style={styles.title}>⏳ {task.title} 진행하기</Text>
+      <Text style={styles.title}>⏳ {task.title} {t('onboarding.start')}</Text>
       
-      {!isRunning ? (
+      {!isRunning && !isStopwatchMode ? (
         // 타이머 선택 화면
         <View style={styles.optionsContainer}>
-          <Text style={styles.selectText}>시간을 선택하세요 </Text>
+          <Text style={styles.selectText}>{t('timer.select_time')}</Text>
           <View style={styles.buttonGroup}>
             {timeOptions.map((option) => (
               <TouchableOpacity
@@ -104,13 +137,53 @@ export default function TimerScreen({ route, navigation }: { route: any, navigat
               </TouchableOpacity>
             ))}
           </View>
+          <TouchableOpacity
+            style={styles.stopwatchButton}
+            onPress={() => setIsStopwatchMode(true)}
+          >
+            <Text style={styles.stopwatchButtonText}>{t('timer.stopwatch_mode')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : isStopwatchMode ? (
+        // 스톱워치 실행 화면
+        <View style={styles.timerContainer}>
+          <Text style={styles.timer}>{formatTime(stopwatchTime)}</Text>
+          <TouchableOpacity 
+            onPress={() => {
+              // 스톱워치 실행 중일 때 확인 메시지 표시
+              Alert.alert(
+                t('timer.stop'),
+                t('timer.confirm_stop_stopwatch'),
+                [
+                  { text: t('common.cancel'), style: 'cancel' },
+                  { 
+                    text: t('timer.stop'), 
+                    onPress: () => {
+                      setIsStopwatchMode(false);
+                      
+                      // 비동기적으로 처리
+                      setTimeout(() => {
+                        if (task) {
+                          onComplete();
+                          navigation.goBack();
+                        }
+                      }, 0);
+                    } 
+                  }
+                ]
+              );
+            }} 
+            style={styles.cancelButton}
+          >
+            <Text style={styles.buttonText}>{t('timer.stop')}</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         // 타이머 실행 화면
         <View style={styles.timerContainer}>
           <Text style={styles.timer}>{timeLeft !== null ? formatTime(timeLeft) : '0:00'}</Text>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.cancelButton}>
-            <Text style={styles.buttonText}>중단</Text>
+            <Text style={styles.buttonText}>{t('timer.stop')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -206,5 +279,18 @@ const styles = StyleSheet.create({
     color: 'white', 
     fontSize: 16, 
     fontWeight: 'bold' 
+  },
+  stopwatchButton: {
+    marginTop: 20,
+    padding: 15,
+    backgroundColor: '#444',
+    borderRadius: 12,
+    alignItems: 'center',
+    width: '80%'
+  },
+  stopwatchButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold'
   },
 });

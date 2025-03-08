@@ -7,6 +7,8 @@ import { useRecoilState, useRecoilValue } from 'recoil';
 import { tasksAtom } from './src/atoms/tasksAtom';
 import { bingoSizeAtom } from './src/atoms/bingoSettingsAtom';
 import { loadTasks } from './src/services/taskService';
+import { StatusBar } from 'react-native';
+import './i18n.config';
 
 const clearAllData = async () => {
   try {
@@ -38,6 +40,7 @@ function AppDataLoader({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <StatusBar hidden={true} />
       <RecoilRoot>
         <AppDataLoader>
           <AppNavigation />

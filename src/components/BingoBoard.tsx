@@ -9,13 +9,32 @@ import { useNavigation } from '@react-navigation/native';
 import TaskModal from './TaskModal';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { scoreAtom } from '../atoms/scoreAtom';
+import { updateScore } from '../firebase/firebaseService';
+import { getAuth } from '@react-native-firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  runTransaction, 
+  serverTimestamp,
+  getDoc,
+  updateDoc
+} from '@react-native-firebase/firestore';
+import { useTranslation } from 'react-i18next';
+
+import { Vibration } from 'react-native';
+
+// Firebase 인스턴스 가져오기
+const auth = getAuth();
+const db = getFirestore();
+
 // 네비게이션 타입 정의
 type RootStackParamList = {
     Home: undefined;
     TimerScreen: { task: Task | null; onComplete: () => void };
   };
   
-  type NavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
+type NavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
 interface BingoCellProps {
   title: string;
@@ -45,6 +64,7 @@ function BingoCell({ title, completed, onPress, onLongPress }: BingoCellProps) {
             }),
           ])
         ).start();
+        //Vibration.vibrate([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
       } else {
         wobbleAnim.setValue(0);
       }
@@ -129,38 +149,207 @@ export default function BingoBoard() {
   const [praiseModalVisible, setPraiseModalVisible] = useState(false);
   const navigation = useNavigation<NavigationProp>();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [lastBingoCount, setLastBingoCount] = useState(0); // 마지막으로 확인한 빙고 수
+  const [scoreState, setScoreState] = useRecoilState(scoreAtom); // 점수 상태
+  
+  const { t } = useTranslation();
 
   const totalCells = bingoSize * bingoSize;
   const centerIndex = Math.floor(totalCells / 2);
 
-  const syncTasksWithBoard = async () => {
-    const lastRandomizeDate = await AsyncStorage.getItem('lastRandomizeDate');
-    const now = new Date().getTime();
+  // BingoBoard.tsx 파일에 개발자 모드 추가
+const [devModeEnabled, setDevModeEnabled] = useState(false);
 
-    if (!lastRandomizeDate || now - parseInt(lastRandomizeDate, 10) > RANDOMIZE_INTERVAL) {
-      const existingTasks = tasks.slice(0, totalCells - 1); // '칭찬하기' 제외
-      const randomizedTasks = randomizeTasks(existingTasks);
-      setTasks(randomizedTasks);
-      await AsyncStorage.setItem('lastRandomizeDate', now.toString());
+// 개발자 모드 토글 함수
+const toggleDevMode = () => {
+  setDevModeEnabled(!devModeEnabled);
+};
+
+// 시뮬레이션 상태 추가
+const [isSimulating, setIsSimulating] = useState(false);
+
+// 날짜 변경 시뮬레이션 함수 수정
+const simulateDateChange = async (daysToAdd = 1) => {
+  if (!devModeEnabled) return;
+  
+  // 시뮬레이션 상태 설정
+  //setIsSimulating(true);
+  setIsSimulating(false);
+
+  // 현재 저장된 마지막 리셋 날짜 가져오기
+  const lastResetDay = await AsyncStorage.getItem('lastResetDay') || new Date().toISOString().split('T')[0];
+  
+  // 지정된 일수만큼 날짜 추가
+  const lastDate = new Date(lastResetDay);
+  lastDate.setDate(lastDate.getDate() + daysToAdd);
+  const newDateStr = lastDate.toISOString().split('T')[0];
+  
+  // 마지막 리셋 날짜 업데이트
+  await AsyncStorage.setItem('lastResetDay', newDateStr);
+  await AsyncStorage.setItem('lastRandomizeDate', newDateStr);
+  
+  // 현재 사용자 확인
+  const currentUser = auth.currentUser;
+  if (currentUser) {
+    try {
+      // 사용자 문서 참조
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const docSnapshot = await getDoc(userDocRef);
+      
+      if (docSnapshot.exists) {
+        const userData = docSnapshot.data();
+        
+        // 기존 점수와 연속 출석 정보 가져오기
+        const currentTotalScore = userData?.totalScore || 0;
+        let newStreak = userData?.streak || 0;
+        const lastAttendanceDate = userData?.lastAttendanceDate;
+        
+        // 마지막 출석일이 시뮬레이션 전날인지 확인
+        const simulatedYesterday = new Date(lastDate);
+        simulatedYesterday.setDate(simulatedYesterday.getDate() - 1);
+        const yesterdayStr = simulatedYesterday.toISOString().split('T')[0];
+        
+        // 출석 보상 계산
+        let attendanceBonus = 0;
+        
+        if (lastAttendanceDate === yesterdayStr) {
+          // 연속 출석
+          newStreak += 1;
+          
+          // 연속 출석 보상 계산
+          if (newStreak === 1) attendanceBonus = 50;
+          else if (newStreak === 2) attendanceBonus = 60;
+          else if (newStreak === 3) attendanceBonus = 70;
+          else if (newStreak === 4) attendanceBonus = 80;
+          else if (newStreak === 5) attendanceBonus = 90;
+          else if (newStreak >= 6) attendanceBonus = 100;
+        } else if (lastAttendanceDate !== newDateStr) {
+          // 연속 출석 끊김
+          newStreak = 1;
+          attendanceBonus = 50; // 첫 출석 보상
+        }
+        
+        // 새로운 총점 계산 (기존 점수 + 출석 보너스)
+        const newTotalScore = currentTotalScore + attendanceBonus;
+        
+        // Firebase 업데이트 - 빙고 수는 업데이트하지 않음
+        await updateDoc(userDocRef, {
+          totalScore: newTotalScore,
+          streak: newStreak,
+          lastAttendanceDate: newDateStr,
+          updatedAt: serverTimestamp()
+        });
+        
+        // 로컬 상태 업데이트 - 빙고 수는 0으로 설정
+        setScoreState(prev => ({
+          ...prev,
+          totalScore: newTotalScore,
+          streak: newStreak,
+          lastAttendanceDate: newDateStr,
+          bingoCount: 0
+        }));
+        
+        // 마지막 빙고 수 리셋
+        setLastBingoCount(0);
+        
+        console.log('시뮬레이션 출석 체크:', { 
+          기존점수: currentTotalScore,
+          연속출석: newStreak, 
+          보너스점수: attendanceBonus,
+          새로운총점: newTotalScore
+        });
+      }
+    } catch (error) {
+      console.error('시뮬레이션 오류:', error);
     }
+  }
+  
+  // 완료 상태 리셋
+  await AsyncStorage.setItem('completedTasks', JSON.stringify({}));
+  
+  // 보드 다시 생성
+  await syncTasksWithBoard();
+  
+  Alert.alert(
+    '날짜 변경 시뮬레이션',
+    `${daysToAdd}일 경과를 시뮬레이션했습니다. 빙고보드가 리셋되었습니다.`,
+    [{ text: '확인', style: 'default' }]
+  );
+  
+  // 시뮬레이션 상태 해제
+  setIsSimulating(false);
+};
 
-    const existingTasks = tasks.slice(0, totalCells - 1); // '칭찬하기' 제외
-    const emptyCellsNeeded = totalCells - 1 - existingTasks.length;
 
-    // 현재 빙고 보드에서 칭찬하기 셀의 완료 상태 확인
-    const praiseCell = bingoBoard.find(cell => cell.id === 9999);
-    const praiseCellCompleted = praiseCell ? praiseCell.completed : false;
 
+
+  const syncTasksWithBoard = async () => {
+    // 날짜 체크
+    const currentDateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const lastRandomizeDate = await AsyncStorage.getItem('lastRandomizeDate');
+    const sizeKey = `bingoSize_${bingoSize}`;
+    const lastSizeKey = await AsyncStorage.getItem('lastBingoSizeKey');
+    
+    // 태스크 배열 가져오기
+    let currentTasks = [...tasks];
+    
+    // 랜덤화 필요 여부 체크 (하루가 지났거나, 저장된 배열이 없는 경우)
+    const needsRandomize = !lastRandomizeDate || lastRandomizeDate !== currentDateStr;
+    
+    if (needsRandomize) {
+      // 하루가 지나서 랜덤화 필요
+      const existingTasks = currentTasks.slice(0, totalCells - 1); // '칭찬하기' 제외
+      const randomizedTasks = randomizeTasks(existingTasks);
+      
+      // 랜덤화된 태스크 저장
+      setTasks(randomizedTasks);
+      currentTasks = randomizedTasks;
+      
+      // 각 사이즈별로 랜덤화된 태스크 저장
+      await AsyncStorage.setItem(`tasks_${bingoSize}x${bingoSize}`, JSON.stringify(randomizedTasks));
+      
+      // 마지막 랜덤화 날짜 저장
+      await AsyncStorage.setItem('lastRandomizeDate', currentDateStr);
+    } else if (sizeKey !== lastSizeKey) {
+      // 사이즈만 변경된 경우 - 해당 사이즈의 저장된 태스크 불러오기
+      const savedTasks = await AsyncStorage.getItem(`tasks_${bingoSize}x${bingoSize}`);
+      if (savedTasks) {
+        const parsedTasks = JSON.parse(savedTasks);
+        setTasks(parsedTasks);
+        currentTasks = parsedTasks;
+      }
+      
+      // 현재 사이즈 키 저장
+      await AsyncStorage.setItem('lastBingoSizeKey', sizeKey);
+    }
+    
+    // 완료 상태 불러오기
+    const completedTasksJson = await AsyncStorage.getItem('completedTasks');
+    const completedTasks = completedTasksJson ? JSON.parse(completedTasksJson) : {};
+    
+    // 빙고 보드 생성
     const filledBoard = Array.from({ length: totalCells }, (_, i) => {
-      if (i === centerIndex) 
-        return { id: 9999, title: '칭찬하기', completed: praiseCellCompleted };
+      if (i === centerIndex) {
+        // 칭찬하기 셀은 항상 중앙에 고정
+        return { 
+          id: 9999, 
+          title: t('bingo.praise'), 
+          completed: completedTasks[9999] || false 
+        };
+      }
 
       // 중앙 셀을 제외한 인덱스 계산
       let taskIndex = i;
       if (i > centerIndex) taskIndex = i - 1;
 
       // 해당 인덱스의 할 일 가져오기 (없으면 빈 셀)
-      return tasks[taskIndex] || { id: -(i + 1), title: '', completed: false };
+      const task = currentTasks[taskIndex] || { id: -(i + 1), title: '', completed: false };
+      
+      // ID 기준으로 완료 상태 복원
+      return { 
+        ...task, 
+        completed: completedTasks[task.id] || false 
+      };
     });
 
     setBingoBoard(filledBoard);
@@ -170,19 +359,214 @@ export default function BingoBoard() {
     syncTasksWithBoard();
   }, [tasks, bingoSize]);
 
-  const toggleTaskCompletion = (id: number) => {
-    setBingoBoard((prev) =>
-      prev.map((cell) =>
-        cell.id === id ? { ...cell, completed: !cell.completed } : cell
-      )
-    );
-    if (id !== 9999) { //  '칭찬하기'도 선택 가능하지만 수정 금지
-        setTasks((prev) =>
-          prev.map((task) =>
-            task.id === id ? { ...task, completed: !task.completed } : task
-          )
-        );
+  // 빙고 체크 로직 추가
+  useEffect(() => {
+    checkBingo();
+  }, [bingoBoard]);
+
+  const checkBingo = async () => {
+    // 2차원 그리드로 변환
+    const grid = Array(bingoSize).fill(null).map(() => Array(bingoSize).fill(false));
+    
+    bingoBoard.forEach((cell, index) => {
+      const row = Math.floor(index / bingoSize);
+      const col = index % bingoSize;
+      grid[row][col] = cell.completed;
+    });
+
+    // 빙고 체크 함수들
+    const checkRow = (row: number) => grid[row].every((cell) => cell);
+    const checkCol = (col: number) => grid.every((row) => row[col]);
+    const checkDiagonal1 = () => grid.every((_, i) => grid[i][i]);
+    const checkDiagonal2 = () => grid.every((_, i) => grid[i][bingoSize - 1 - i]);
+
+    let bingoCount = 0;
+
+    // 가로 체크
+    for (let i = 0; i < bingoSize; i++) {
+      if (checkRow(i)) bingoCount++;
+    }
+
+    // 세로 체크
+    for (let i = 0; i < bingoSize; i++) {
+      if (checkCol(i)) bingoCount++;
+    }
+
+    // 대각선 체크
+    if (checkDiagonal1()) bingoCount++;
+    if (checkDiagonal2()) bingoCount++;
+
+    // 이전 빙고 수와 현재 빙고 수 비교
+    const bingoDifference = bingoCount - lastBingoCount;
+    
+    // 빙고 수 변화에 따른 처리
+    if (bingoDifference > 0) {
+      // 새로운 빙고가 생겼을 때
+      Alert.alert(
+        '🎉 ' + t('bingo.complete'), 
+        `${t('bingo.congratulations')} ${bingoCount} ${t('bingo.congratulations_text')}`,
+        [{ text: t('common.confirm'), style: 'default' }]
+      );
+
+      // 출석 체크
+      await checkAttendance();
+
+    } else if (bingoDifference < 0) {
+      // 빙고가 취소되었을 때
+      // Alert.alert(
+      //   '빙고 취소', 
+      //   `${Math.abs(bingoDifference)}줄의 빙고가 취소되었습니다.`,
+      //   [{ text: '확인', style: 'default' }]
+      // );
+    }
+    
+    // 현재 빙고 수 저장
+    setLastBingoCount(bingoCount);
+    
+    // 점수 업데이트 - 빙고 수 변화에 따라 점수 조정
+    if (bingoDifference !== 0) {
+      // 빙고 점수 업데이트
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        try {
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          getDoc(userDocRef).then(docSnapshot => {
+            if (docSnapshot.exists) {
+              const userData = docSnapshot.data();
+              const currentTotalScore = userData?.totalScore || 0;
+              
+              // 빙고 변화에 따른 점수 조정 (빙고당 100점)
+              const scoreChange = bingoDifference * 100;
+              const newTotalScore = Math.max(0, currentTotalScore + scoreChange);
+              
+              // Firebase 업데이트
+              updateDoc(userDocRef, {
+                totalScore: newTotalScore,
+                bingoCount: bingoCount,
+                updatedAt: serverTimestamp()
+              });
+              
+              // 로컬 상태 업데이트
+              setScoreState(prev => ({
+                ...prev,
+                totalScore: newTotalScore,
+                bingoCount: bingoCount
+              }));
+              
+              console.log('빙고 점수 업데이트:', {
+                이전점수: currentTotalScore,
+                변화: scoreChange,
+                새점수: newTotalScore,
+                빙고수: bingoCount
+              });
+            }
+          });
+        } catch (error) {
+          console.error('점수 업데이트 오류:', error);
+        }
       }
+    }
+  };
+
+
+  // 출석 체크 함수
+  const checkAttendance = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    try {
+      // 트랜잭션 대신 일반 업데이트 사용
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const docSnapshot = await getDoc(userDocRef);
+      
+      if (docSnapshot.exists) {
+        const userData = docSnapshot.data();
+        const lastAttendanceDate = userData?.lastAttendanceDate;
+        // 연속 출석 계산
+        let newStreak = userData?.streak || 0;
+        
+        // 오늘 이미 출석했는지 확인
+        if (lastAttendanceDate === today) {
+          console.log('이미 오늘 출석했습니다.');
+          return;
+        }
+        
+        // 어제 출석했는지 확인
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        
+        if (lastAttendanceDate === yesterdayStr) {
+          // 연속 출석
+          newStreak += 1;
+        } else {
+          // 연속 출석 끊김
+          newStreak = 1;
+        }
+        
+        // 연속 출석 보상 계산
+        let attendanceBonus = 0;
+        if (newStreak === 1) attendanceBonus = 50;
+        else if (newStreak === 2) attendanceBonus = 60;
+        else if (newStreak === 3) attendanceBonus = 70;
+        else if (newStreak === 4) attendanceBonus = 80;
+        else if (newStreak === 5) attendanceBonus = 90;
+        else if (newStreak >= 6) attendanceBonus = 100;
+        
+        // 현재 총점에 출석 보너스 추가
+        const newTotalScore = (userData?.totalScore || 0) + attendanceBonus;
+        
+        // 업데이트
+        await updateDoc(userDocRef, {
+          streak: newStreak,
+          lastAttendanceDate: today,
+          updatedAt: serverTimestamp()
+        });
+
+        Alert.alert(
+            '출석 체크 완료!',
+            `${newStreak}일 연속 출석 중입니다. 보상으로 50점이 추가되었습니다!`,
+            [{ text: '확인', style: 'default' }]
+        );
+        
+        // 로컬 상태 업데이트
+        setScoreState(prev => ({
+          ...prev,
+          totalScore: prev.totalScore + attendanceBonus,
+          streak: newStreak,
+          lastAttendanceDate: today
+        }));
+        
+        console.log('출석 체크 완료:', { 연속출석: newStreak });
+      }
+    } catch (error) {
+      console.error('출석 체크 오류:', error);
+    }
+  };
+
+  
+
+  const toggleTaskCompletion = async (taskId: number) => {
+
+    // 완료 상태 변경
+    const updatedBoard = bingoBoard.map((cell) =>
+      cell.id === taskId ? { ...cell, completed: !cell.completed } : cell
+    );
+    setBingoBoard(updatedBoard);
+    
+    // 태스크 ID 기준으로 완료 상태 저장
+    const completedTasksJson = await AsyncStorage.getItem('completedTasks');
+    const completedTasks = completedTasksJson ? JSON.parse(completedTasksJson) : {};
+    
+    const updatedTask = updatedBoard.find(cell => cell.id === taskId);
+    if (updatedTask) {
+      completedTasks[taskId] = updatedTask.completed;
+      await AsyncStorage.setItem('completedTasks', JSON.stringify(completedTasks));
+    }
+  
+    console.log('완료 상태 변경:', taskId);
   };
 
   const handleLongPress = (id: number, title: string) => {
@@ -231,20 +615,12 @@ export default function BingoBoard() {
     if (selectedTask) {
       // 할 일 자동 완료 처리
       console.log(`${selectedTask.title} 완료됨!`);
+
+      // 완료 상태 변경
+      toggleTaskCompletion(selectedTask.id);
+      checkBingo();
       
-      // 상태 업데이트
-      setBingoBoard((prev) =>
-        prev.map((cell) =>
-          cell.id === selectedTask.id ? { ...cell, completed: true } : cell
-        )
-      );
-      
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === selectedTask.id ? { ...task, completed: true } : task
-        )
-      );
-      
+      // 타이머 완료 후 선택된 태스크 초기화
       setSelectedTask(null);
     }
   };
@@ -262,6 +638,184 @@ export default function BingoBoard() {
           task.id === selectedTask.id ? { ...task, title: text } : task
         )
       );
+    }
+  };
+
+  useEffect(() => {
+    // 로그인 상태일 때만 점수 동기화
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      updateScore(scoreState);
+    }
+  }, [scoreState]);
+
+  // 일일 리셋 및 점수 업데이트 함수 수정
+  const dailyReset = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    const lastResetDay = await AsyncStorage.getItem('lastResetDay');
+    
+    // 하루가 지났는지 확인
+    if (lastResetDay !== today) {
+      console.log('날짜가 변경되어 빙고보드를 리셋합니다:', lastResetDay, '->', today);
+      
+      // 현재 사용자 확인
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        try {
+          // Firestore 문서 참조 가져오기
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          
+          // 현재 사용자 데이터 가져오기
+          const docSnapshot = await getDoc(userDocRef);
+          
+          if (docSnapshot.exists) {
+            const userData = docSnapshot.data() || {};
+            
+            // 누적 점수 가져오기 (Firebase에 저장된 값)
+            const totalScore = userData.totalScore || 0;
+            const streak = userData.streak || 0;
+            const lastAttendanceDate = userData.lastAttendanceDate || null;
+
+            await updateDoc(userDocRef, {
+              streak: 0,
+              updatedAt: serverTimestamp()
+            });
+
+            // 로컬 상태 업데이트 - 누적 점수는 유지
+            setScoreState(prev => ({
+              ...prev,
+              totalScore: totalScore, // Firebase에서 가져온 누적 점수로 설정
+              streak: streak,
+              lastAttendanceDate: lastAttendanceDate,
+              //bingoCount: 0 // 빙고 수만 리셋
+            }));
+          }
+        } catch (error) {
+          console.error('점수 업데이트 오류:', error);
+        }
+      }
+      
+      // 완료 상태 리셋
+      await AsyncStorage.setItem('completedTasks', JSON.stringify({}));
+      
+      // 마지막 리셋 날짜 업데이트
+      await AsyncStorage.setItem('lastResetDay', today);
+      
+      // 보드판 상태 리셋 및 새로운 랜덤 배치 적용
+      await AsyncStorage.removeItem('lastRandomizeDate');
+      
+      // 보드 다시 생성
+      await syncTasksWithBoard();
+    }
+  };
+
+  // useEffect 훅에 dailyReset 추가
+  useEffect(() => {
+    dailyReset();
+    syncUserScoreFromFirebase();
+  }, []); // 컴포넌트 마운트 시 실행
+
+  // 빙고 취소 로직 추가
+  const cancelBingo = async (taskId: number) => {
+    // 빙고 완료 취소
+    const updatedBoard = bingoBoard.map((cell) =>
+      cell.id === taskId ? { ...cell, completed: false } : cell
+    );
+    setBingoBoard(updatedBoard);
+    
+    // 완료 상태 저장소 업데이트
+    const completedTasksJson = await AsyncStorage.getItem('completedTasks');
+    const completedTasks = completedTasksJson ? JSON.parse(completedTasksJson) : {};
+    delete completedTasks[taskId];
+    await AsyncStorage.setItem('completedTasks', JSON.stringify(completedTasks));
+    
+    // 빙고 체크 다시 실행
+    checkBingo();
+  };
+
+  // 점수 업데이트 함수 수정
+  const updateScoreAndStreak = async (newScore: number, bingoCount: number) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    try {
+      // 사용자 문서 참조
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const docSnapshot = await getDoc(userDocRef);
+      
+      if (docSnapshot.exists) {
+        const userData = docSnapshot.data();
+        
+        // 기존 점수 가져오기
+        const currentTotalScore = userData?.totalScore || 0;
+        
+        // 오늘 이미 점수를 업데이트했는지 확인
+        //const lastScoreDate = await AsyncStorage.getItem('lastScoreDate');
+        
+        // 오늘 처음 점수를 업데이트하는 경우에만 누적
+        let updatedScore = currentTotalScore;
+        //if (lastScoreDate !== today) {
+        //  updatedScore = currentTotalScore + newScore;
+        //  await AsyncStorage.setItem('lastScoreDate', today);
+        //}
+        
+        updatedScore = currentTotalScore + newScore;
+        // 업데이트
+        await updateDoc(userDocRef, {
+          totalScore: updatedScore,
+          bingoCount: bingoCount,
+          updatedAt: serverTimestamp()
+        });
+        
+        // 로컬 상태 업데이트
+        setScoreState(prev => ({
+          ...prev,
+          totalScore: updatedScore,  // 로컬에는 오늘의 점수만 표시
+          bingoCount: bingoCount
+        }));
+        
+        console.log('점수 업데이트:', { 
+          기존점수: currentTotalScore, 
+          오늘점수: newScore, 
+          누적점수: updatedScore,
+          빙고수: bingoCount
+        });
+      }
+    } catch (error) {
+      console.error('점수 업데이트 오류:', error);
+    }
+  };
+
+  // Firebase에서 사용자 점수 동기화
+  const syncUserScoreFromFirebase = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+    
+    try {
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const docSnapshot = await getDoc(userDocRef);
+      
+      if (docSnapshot.exists) {
+        const userData = docSnapshot.data();
+        
+        // 로컬 상태 업데이트
+        setScoreState(prev => ({
+          ...prev,
+          totalScore: userData?.totalScore || 0,
+          streak: userData?.streak || 0,
+          lastAttendanceDate: userData?.lastAttendanceDate || null
+        }));
+        
+        console.log('Firebase에서 점수 동기화 완료:', {
+          totalScore: userData?.totalScore,
+          streak: userData?.streak,
+          lastAttendanceDate: userData?.lastAttendanceDate
+        });
+      }
+    } catch (error) {
+      console.error('점수 동기화 오류:', error);
     }
   };
 
@@ -303,9 +857,9 @@ export default function BingoBoard() {
 >
   <View style={styles.modalOverlay}>
     <View style={styles.modalContainer}>
-      <Text style={styles.modalTitle}>칭찬은 수정이 안돼요</Text>
+      <Text style={styles.modalTitle}>{t('bingo.praise_modal_title')}</Text>
       <View style={styles.praiseContent}>
-        <Text style={styles.praiseText}>거울속 자신에게 칭찬 한마디도 충분해요!</Text>
+        <Text style={styles.praiseText}>{t('bingo.praise_modal_text')}</Text>
         <LinearGradient
           colors={['#8EB69B', '#235347']}
           style={styles.praiseIcon}
@@ -318,7 +872,7 @@ export default function BingoBoard() {
           style={[styles.modalButton, styles.cancelButton]} 
           onPress={() => setPraiseModalVisible(false)}
         >
-          <Text style={styles.buttonText}>닫기</Text>
+          <Text style={styles.buttonText}>{t('bingo.close')}</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.modalButton, styles.saveButton]} 
@@ -327,12 +881,57 @@ export default function BingoBoard() {
             setPraiseModalVisible(false);
           }}
         >
-          <Text style={styles.buttonText}>완료</Text>
+          <Text style={styles.buttonText}>{t('common.confirm')}</Text>
         </TouchableOpacity>
       </View>
     </View>
   </View>
 </Modal>
+
+      {/* 개발자 모드 UI */}
+      {/* <View style={styles.devModeContainer}>
+        <TouchableOpacity 
+          onPress={toggleDevMode}
+          onLongPress={() => simulateDateChange(1)}
+          style={[styles.devModeButton, devModeEnabled && styles.devModeButtonActive]}
+        >
+          <Text style={styles.devModeButtonText}>
+            {devModeEnabled ? '개발자 모드 활성화됨' : 'DEV'}
+          </Text>
+        </TouchableOpacity>
+        
+        {devModeEnabled && (
+          <View style={styles.devModeContainer}>
+            <Text style={styles.devModeTitle}>개발자 모드</Text>
+            <View style={styles.devModeButtons}>
+              <TouchableOpacity 
+                style={styles.devButton}
+                onPress={() => simulateDateChange(1)}
+              >
+                <Text style={styles.devButtonText}>1일 경과</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.devButton}
+                onPress={() => simulateDateChange(2)}
+              >
+                <Text style={styles.devButtonText}>2일 경과</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.devButton}
+                onPress={() => simulateDateChange(3)}
+              >
+                <Text style={styles.devButtonText}>3일 경과</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity 
+              style={styles.devButton}
+              onPress={checkAttendance}
+            >
+              <Text style={styles.devButtonText}>출석 체크</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View> */}
     </View>
   );
 }
@@ -465,5 +1064,44 @@ const styles = StyleSheet.create({
       fontSize: 24,
       fontWeight: 'bold',
       color: '#fff',
+    },
+    devModeContainer: {
+      position: 'absolute',
+      bottom: 10,
+      right: 10,
+      alignItems: 'flex-end',
+    },
+    devModeButton: {
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 4,
+    },
+    devModeButtonActive: {
+      backgroundColor: 'rgba(255, 0, 0, 0.5)',
+    },
+    devModeButtonText: {
+      color: 'white',
+      fontSize: 10,
+    },
+    devModeTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: '#fff',
+      marginBottom: 10,
+    },
+    devModeButtons: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+    devButton: {
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 4,
+    },
+    devButtonText: {
+      color: 'white',
+      fontSize: 12,
     },
 });

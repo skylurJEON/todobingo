@@ -1,0 +1,127 @@
+{
+    "common": {
+      "login": "ログイン",
+      "signup": "新規登録",
+      "logout": "ログアウト",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "name": "名前",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "edit": "編集",
+      "confirm": "確認",
+      "welcome": "ようこそ！",
+      "continue_with_apple": "Appleで続ける",
+      "day": "日",
+      "points": "点",
+      "rank": "ランク",
+      "home": "ホーム",
+      "settings": "設定"
+    },
+    "login": {
+      "title": "ログイン",
+      "signup_title": "新規登録",
+      "have_account": "すでにアカウントをお持ちですか？ログイン",
+      "no_account": "アカウントをお持ちでないですか？新規登録",
+      "success": "登録成功"
+    },
+    "errors": {
+      "login_failed": "ログインに失敗しました。",
+      "apple_login_failed": "Appleログインに失敗しました。",
+      "email_password_required": "メールアドレスとパスワードを入力してください。",
+      "name_required": "名前を入力してください。",
+      "invalid_credentials": "メールアドレスまたはパスワードが正しくありません。",
+      "email_in_use": "このメールアドレスは既に使用されています。",
+      "invalid_email": "無効なメールアドレス形式です。",
+      "weak_password": "パスワードは6文字以上である必要があります。",
+      "account_exists": "このメールアドレスは既に別の方法で登録されています。",
+      "error": "エラー",
+      "input_error": "入力エラー"
+    },
+    "settings": {
+      "title": "設定",
+      "bingo_size": "ビンゴサイズ",
+      "profile": "プロフィール",
+      "change_name": "名前を変更",
+      "new_name": "新しい名前",
+      "language": "言語"
+    },
+    "rank": {
+      "title": "ランキング",
+      "my_rank": "自分のランク",
+      "login_to_see": "ランクを見るにはログインしてください！",
+      "all_rank": "全ランク"
+    },
+    "bingo": {
+      "praise": "自己褒め",
+      "praise_modal_title": "褒めは編集できません",
+      "praise_modal_text": "鏡の中の自分に一言褒めるだけで十分です！",
+      "close": "閉じる",
+      "complete": "ビンゴ完了",
+      "congratulations": "おめでとうございます！",
+      "congratulations_text": "ビンゴラインが完成しました！"
+    },
+    "timer": {
+      "start": "タイマー開始",
+      "stop": "停止",
+      "select_time": "時間を選択してください",
+      "stopwatch_mode": "ストップウォッチモード",
+      "confirm_stop_timer": "本当にタイマーを停止しますか？",
+      "confirm_stop_stopwatch": "本当にストップウォッチを停止しますか？",
+      "time_options": "分"
+    },
+    "task": {
+      "title": "タスク管理",
+      "empty": "空欄",
+      "edit": "編集",
+      "manage": "タスク管理",
+      "enter_task": "タスクを入力してください"
+    },
+    "onboarding": {
+      "welcome": "ルーティンビンゴへようこそ！",
+      "slide1": "タスクを完了してタッチしてビンゴを完成させましょう",
+      "slide2": "ビンゴを長押しすると",
+      "slide3": "好きなタスクに変更でき、タイマーも使えます！",
+      "slide4": "ログインしてランキングに参加して競争しましょう！",
+      "next": "次へ",
+      "start": "始める"
+    },
+    "default_tasks": {
+      "small": [
+        "ストレッチ", 
+        "日記を書く", 
+        "読書", 
+        "散歩", 
+        "掃除", 
+        "運動", 
+        "趣味", 
+        "音楽を聴く"
+      ],
+      "large": [
+        "ストレッチ", 
+        "日記を書く", 
+        "読書", 
+        "散歩", 
+        "掃除", 
+        "運動", 
+        "趣味", 
+        "音楽を聴く", 
+        "英語学習", 
+        "計画整理", 
+        "水を飲む", 
+        "料理", 
+        "会話", 
+        "連絡する", 
+        "部屋の整理", 
+        "ビンゴルーティン", 
+        "ゴミ拾い", 
+        "自己慰労", 
+        "瞑想", 
+        "禁煙", 
+        "コーヒーブレイク", 
+        "勉強",
+        "悪口を言わない", 
+        "挨拶"
+      ]
+    }
+  }

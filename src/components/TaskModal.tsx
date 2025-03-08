@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
 import { Task } from '../atoms/tasksAtom';
-
+import { useTranslation } from 'react-i18next';
 interface TaskModalProps {
   visible: boolean;
   onClose: () => void;
@@ -12,7 +12,8 @@ interface TaskModalProps {
 
 export default function TaskModal({ visible, onClose, onStartTimer, task, onSave }: TaskModalProps) {
   const [editText, setEditText] = useState(task?.title || '');
-  
+  const { t } = useTranslation();
+
   // task가 변경될 때마다 editText 업데이트
   useEffect(() => {
     if (task?.title) {
@@ -36,14 +37,14 @@ export default function TaskModal({ visible, onClose, onStartTimer, task, onSave
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>할 일 관리</Text>
+          <Text style={styles.modalTitle}>{t('task.title')}</Text>
           
           <TextInput
             style={styles.modalInput}
             value={editText}
             onChangeText={setEditText}
             multiline
-            placeholder="할 일을 입력하세요"
+            placeholder={t('task.enter_task')}
           />
           
           <View style={styles.modalButtons}>
@@ -51,14 +52,14 @@ export default function TaskModal({ visible, onClose, onStartTimer, task, onSave
               style={[styles.modalButton, styles.cancelButton]} 
               onPress={onClose}
             >
-              <Text style={styles.buttonText}>취소</Text>
+              <Text style={styles.buttonText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={[styles.modalButton, styles.saveButton]} 
               onPress={handleSave}
             >
-              <Text style={styles.buttonText}>저장</Text>
+              <Text style={styles.buttonText}>{t('common.save')}</Text>
             </TouchableOpacity>
           </View>
           
@@ -66,7 +67,7 @@ export default function TaskModal({ visible, onClose, onStartTimer, task, onSave
             style={styles.timerButton} 
             onPress={onStartTimer}
           >
-            <Text style={styles.buttonText}>⏳ 타이머 시작</Text>
+            <Text style={styles.buttonText}>⏳ {t('timer.start')}</Text>
           </TouchableOpacity>
         </View>
       </View>

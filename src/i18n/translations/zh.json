@@ -1,0 +1,127 @@
+{
+    "common": {
+      "login": "登录",
+      "signup": "注册",
+      "logout": "退出登录",
+      "email": "邮箱",
+      "password": "密码",
+      "name": "姓名",
+      "save": "保存",
+      "cancel": "取消",
+      "edit": "编辑",
+      "confirm": "确认",
+      "welcome": "欢迎！",
+      "continue_with_apple": "使用Apple继续",
+      "day": "天",
+      "points": "点",
+      "rank": "排名",
+      "home": "主页",
+      "settings": "设置"
+    },
+    "login": {
+      "title": "登录",
+      "signup_title": "注册",
+      "have_account": "已有账号？登录",
+      "no_account": "没有账号？注册",
+      "success": "注册成功"
+    },
+    "errors": {
+      "login_failed": "登录失败。",
+      "apple_login_failed": "Apple登录失败。",
+      "email_password_required": "请输入邮箱和密码。",
+      "name_required": "请输入姓名。",
+      "invalid_credentials": "邮箱或密码不正确。",
+      "email_in_use": "该邮箱已被使用。",
+      "invalid_email": "无效的邮箱格式。",
+      "weak_password": "密码至少需要6个字符。",
+      "account_exists": "该邮箱已通过其他方式注册。",
+      "error": "错误",
+      "input_error": "输入错误"
+    },
+    "settings": {
+      "title": "设置",
+      "bingo_size": "宾果大小",
+      "profile": "个人资料",
+      "change_name": "修改姓名",
+      "new_name": "新姓名",
+      "language": "语言"
+    },
+    "rank": {
+      "title": "排名",
+      "my_rank": "我的排名",
+      "login_to_see": "登录查看排名！",
+      "all_rank": "全部排名"
+    },
+    "bingo": {
+      "praise": "自我表扬",
+      "praise_modal_title": "表扬不能编辑",
+      "praise_modal_text": "对镜子里的自己说一句表扬的话就足够了！",
+      "close": "关闭",
+      "complete": "完成",
+      "congratulations": "恭喜！",
+      "congratulations_text": "宾果线完成！"
+    },
+    "timer": {
+      "start": "开始计时",
+      "stop": "停止",
+      "select_time": "选择时间",
+      "stopwatch_mode": "秒表模式",
+      "confirm_stop_timer": "确定要停止计时器吗？",
+      "confirm_stop_stopwatch": "确定要停止秒表吗？",
+      "time_options": "分"
+    },
+    "task": {
+      "title": "任务列表",
+      "empty": "空白",
+      "edit": "编辑",
+      "manage": "管理任务",
+      "enter_task": "输入任务"
+    },
+    "onboarding": {
+      "welcome": "欢迎使用例行宾果！",
+      "slide1": "完成任务并触摸以完成宾果",
+      "slide2": "长按宾果格",
+      "slide3": "可以更改为任何任务，还可以使用计时器！",
+      "slide4": "登录参与排名并竞争！",
+      "next": "下一步",
+      "start": "开始"
+    },
+    "default_tasks": {
+      "small": [
+        "伸展运动", 
+        "写日记", 
+        "阅读", 
+        "散步", 
+        "打扫", 
+        "锻炼", 
+        "爱好活动", 
+        "听音乐"
+      ],
+      "large": [
+        "伸展运动", 
+        "写日记", 
+        "阅读", 
+        "散步", 
+        "打扫", 
+        "锻炼", 
+        "爱好活动", 
+        "听音乐", 
+        "学英语", 
+        "整理计划", 
+        "喝水", 
+        "做饭", 
+        "交谈", 
+        "联系朋友", 
+        "整理家务", 
+        "宾果例行", 
+        "捡垃圾", 
+        "自我安慰", 
+        "冥想", 
+        "戒烟", 
+        "喝咖啡", 
+        "学习",
+        "不说脏话", 
+        "问候"
+      ]
+    }
+  }

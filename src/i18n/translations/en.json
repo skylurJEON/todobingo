@@ -1,0 +1,127 @@
+{
+    "common": {
+      "login": "Login",
+      "signup": "Sign Up",
+      "logout": "Logout",
+      "email": "Email",
+      "password": "Password",
+      "name": "Name",
+      "save": "Save",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "confirm": "Confirm",
+      "welcome": "Welcome!",
+      "continue_with_apple": "Continue with Apple",
+      "day": "day",
+      "points": "pt",
+      "rank": "rank",
+      "home": "home",
+      "settings": "settings"
+    },
+    "login": {
+      "title": "Login",
+      "signup_title": "Sign Up",
+      "have_account": "Already have an account? Login",
+      "no_account": "Don't have an account? Sign Up",
+      "success": "Sign Up Successful"
+    },
+    "errors": {
+      "login_failed": "Login failed.",
+      "apple_login_failed": "Apple login failed.",
+      "email_password_required": "Please enter email and password.",
+      "name_required": "Please enter your name.",
+      "invalid_credentials": "Email or password is incorrect.",
+      "email_in_use": "This email is already in use.",
+      "invalid_email": "Invalid email format.",
+      "weak_password": "Password must be at least 6 characters.",
+      "account_exists": "This email is already registered with a different method.",
+      "error": "Error",
+      "input_error": "Input Error"
+    },
+    "settings": {
+      "title": "Settings",
+      "bingo_size": "Bingo Size",
+      "profile": "Profile",
+      "change_name": "Change Name",
+      "new_name": "New Name",
+      "language": "Language"
+    },
+    "rank": {
+      "title": "Ranking",
+      "my_rank": "My Rank",
+      "login_to_see": "Login to see your rank!",
+      "all_rank": "All Rank"
+    },
+    "bingo": {
+      "praise": "Self Praise",
+      "praise_modal_title": "Praise cannot be edited",
+      "praise_modal_text": "A word of praise to yourself in the mirror is enough!",
+      "close": "Close",
+      "complete": "Bingo Complete",
+      "congratulations": "Congratulations!",
+      "congratulations_text": "bingo line completed!"
+    },
+    "timer": {
+      "start": "Start Timer",
+      "stop": "Stop",
+      "select_time": "Select Time",
+      "stopwatch_mode": "Stopwatch Mode",
+      "confirm_stop_timer": "Are you sure you want to stop the timer?",
+      "confirm_stop_stopwatch": "Are you sure you want to stop the stopwatch?",
+      "time_options": "mins"
+    },
+    "task": {
+      "title": "Task Management",
+      "empty": "Empty",
+      "edit": "Edit",
+      "manage": "Manage Tasks",
+      "enter_task": "Enter a task"
+    },
+    "onboarding": {
+      "welcome": "Welcome to Routine Bingo!",
+      "slide1": "Complete tasks and touch to complete bingo",
+      "slide2": "Long press on a bingo cell",
+      "slide3": "Change to any task you want, and use the timer!",
+      "slide4": "Login to participate in rankings and compete!",
+      "next": "Next",
+      "start": "Start"
+    },
+    "default_tasks": {
+      "small": [
+        "Stretching", 
+        "Journaling", 
+        "Reading", 
+        "Walking", 
+        "Cleaning", 
+        "Exercise", 
+        "Hobby", 
+        "Music"
+      ],
+      "large": [
+        "Stretching", 
+        "Journaling", 
+        "Reading", 
+        "Walking", 
+        "Cleaning", 
+        "Exercise", 
+        "Hobby", 
+        "Music", 
+        "English Study", 
+        "Planning", 
+        "Drink Water", 
+        "Cooking", 
+        "Conversation", 
+        "Contact Friends", 
+        "Organize Home", 
+        "Bingo Routine", 
+        "Pick Up Trash", 
+        "Self-comfort", 
+        "Meditation", 
+        "No Smoking", 
+        "Coffee Break", 
+        "Study",
+        "No Swearing", 
+        "Greetings"
+      ]
+    }
+  }
