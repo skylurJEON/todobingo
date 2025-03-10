@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Alert, Animated, Modal, TextInput } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Alert, Animated, Modal, TextInput, AppState } from 'react-native';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { tasksAtom, Task } from '../atoms/tasksAtom';
 import { bingoSizeAtom } from '../atoms/bingoSettingsAtom';
@@ -21,6 +21,7 @@ import {
   updateDoc
 } from '@react-native-firebase/firestore';
 import { useTranslation } from 'react-i18next';
+import { loadTasks } from '../services/taskService';
 
 import { Vibration } from 'react-native';
 
@@ -136,6 +137,15 @@ const randomizeTasks = (tasks: Task[]) => {
     .sort((a, b) => a.sort - b.sort)
     .map(({ sort, ...task }) => task);
   return shuffled;
+};
+
+// 현재 날짜를 로컬 시간대 기준으로 가져오는 함수
+const getCurrentLocalDate = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 export default function BingoBoard() {
@@ -292,6 +302,25 @@ const simulateDateChange = async (daysToAdd = 1) => {
     
     // 태스크 배열 가져오기
     let currentTasks = [...tasks];
+
+    // 태스크가 비어있는지 확인
+    const hasEmptyTasks = currentTasks.length === 0 || 
+                          currentTasks.every(task => !task.title);
+
+    // 태스크가 비어있으면 저장된 태스크 또는 기본 태스크 로드
+    if (hasEmptyTasks) {
+      const savedTasksJson = await AsyncStorage.getItem(`tasks_${bingoSize}x${bingoSize}`);
+      if (savedTasksJson) {
+        currentTasks = JSON.parse(savedTasksJson);
+        console.log('저장된 태스크 로드:', currentTasks);
+      } else {
+        // 저장된 태스크가 없으면 기본 태스크 로드
+        const defaultTasks = await loadTasks(bingoSize);
+        currentTasks = defaultTasks;
+        console.log('기본 태스크 로드:', defaultTasks);
+      }
+      setTasks(currentTasks);
+    }
     
     // 랜덤화 필요 여부 체크 (하루가 지났거나, 저장된 배열이 없는 경우)
     const needsRandomize = !lastRandomizeDate || lastRandomizeDate !== currentDateStr;
@@ -299,6 +328,15 @@ const simulateDateChange = async (daysToAdd = 1) => {
     if (needsRandomize) {
       // 하루가 지나서 랜덤화 필요
       const existingTasks = currentTasks.slice(0, totalCells - 1); // '칭찬하기' 제외
+
+      // 태스크가 비어있는지 다시 확인
+      if (existingTasks.length === 0 || existingTasks.every(task => !task.title)) {
+        // 기본 태스크 로드
+        const defaultTasks = await loadTasks(bingoSize);
+        currentTasks = defaultTasks;
+        console.log('랜덤화를 위한 기본 태스크 로드:', defaultTasks);
+      }
+
       const randomizedTasks = randomizeTasks(existingTasks);
       
       // 랜덤화된 태스크 저장
@@ -402,11 +440,11 @@ const simulateDateChange = async (daysToAdd = 1) => {
     // 빙고 수 변화에 따른 처리
     if (bingoDifference > 0) {
       // 새로운 빙고가 생겼을 때
-      Alert.alert(
-        '🎉 ' + t('bingo.complete'), 
-        `${t('bingo.congratulations')} ${bingoCount} ${t('bingo.congratulations_text')}`,
-        [{ text: t('common.confirm'), style: 'default' }]
-      );
+      // Alert.alert(
+      //   '🎉 ' + t('bingo.complete'), 
+      //   `${t('bingo.congratulations')} ${bingoCount} ${t('bingo.congratulations_text')}`,
+      //   [{ text: t('common.confirm'), style: 'default' }]
+      // );
 
       // 출석 체크
       await checkAttendance();
@@ -477,69 +515,81 @@ const simulateDateChange = async (daysToAdd = 1) => {
     const today = new Date().toISOString().split('T')[0];
     
     try {
-      // 트랜잭션 대신 일반 업데이트 사용
+      // 사용자 문서 참조
       const userDocRef = doc(db, 'users', currentUser.uid);
       const docSnapshot = await getDoc(userDocRef);
       
       if (docSnapshot.exists) {
         const userData = docSnapshot.data();
-        const lastAttendanceDate = userData?.lastAttendanceDate;
-        // 연속 출석 계산
+        
+        // 기존 점수와 연속 출석 정보 가져오기
+        const currentTotalScore = userData?.totalScore || 0;
         let newStreak = userData?.streak || 0;
+        const lastAttendanceDate = userData?.lastAttendanceDate;
         
         // 오늘 이미 출석했는지 확인
         if (lastAttendanceDate === today) {
-          console.log('이미 오늘 출석했습니다.');
+          console.log('오늘 이미 출석 체크됨');
           return;
         }
         
-        // 어제 출석했는지 확인
+        // 마지막 출석일이 어제인지 확인
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().split('T')[0];
         
+        // 출석 보상 계산
+        let attendanceBonus = 0;
+        
         if (lastAttendanceDate === yesterdayStr) {
           // 연속 출석
           newStreak += 1;
+          
+          // 연속 출석 보상 계산
+          if (newStreak === 1) attendanceBonus = 50;
+          else if (newStreak === 2) attendanceBonus = 60;
+          else if (newStreak === 3) attendanceBonus = 70;
+          else if (newStreak === 4) attendanceBonus = 80;
+          else if (newStreak === 5) attendanceBonus = 90;
+          else if (newStreak >= 6) attendanceBonus = 100;
         } else {
           // 연속 출석 끊김
           newStreak = 1;
+          attendanceBonus = 50; // 첫 출석 보상
         }
         
-        // 연속 출석 보상 계산
-        let attendanceBonus = 0;
-        if (newStreak === 1) attendanceBonus = 50;
-        else if (newStreak === 2) attendanceBonus = 60;
-        else if (newStreak === 3) attendanceBonus = 70;
-        else if (newStreak === 4) attendanceBonus = 80;
-        else if (newStreak === 5) attendanceBonus = 90;
-        else if (newStreak >= 6) attendanceBonus = 100;
+        // 새로운 총점 계산
+        const newTotalScore = currentTotalScore + attendanceBonus;
         
-        // 현재 총점에 출석 보너스 추가
-        const newTotalScore = (userData?.totalScore || 0) + attendanceBonus;
-        
-        // 업데이트
+        // Firebase 업데이트
         await updateDoc(userDocRef, {
+          totalScore: newTotalScore,
           streak: newStreak,
           lastAttendanceDate: today,
           updatedAt: serverTimestamp()
         });
-
-        Alert.alert(
-            '출석 체크 완료!',
-            `${newStreak}일 연속 출석 중입니다. 보상으로 50점이 추가되었습니다!`,
-            [{ text: '확인', style: 'default' }]
-        );
         
         // 로컬 상태 업데이트
         setScoreState(prev => ({
           ...prev,
-          totalScore: prev.totalScore + attendanceBonus,
+          totalScore: newTotalScore,
           streak: newStreak,
           lastAttendanceDate: today
         }));
         
-        console.log('출석 체크 완료:', { 연속출석: newStreak });
+        console.log('출석 체크 완료:', { 
+          기존점수: currentTotalScore,
+          연속출석: newStreak, 
+          보너스점수: attendanceBonus,
+          새로운총점: newTotalScore
+        });
+        
+        // 출석 보상 알림
+        // Alert.alert(
+        //   '출석 보상',
+        //   `연속 ${newStreak}일 출석! ${attendanceBonus}점이 적립되었습니다.`,
+        //   [{ text: '확인', style: 'default' }]
+        // );
       }
     } catch (error) {
       console.error('출석 체크 오류:', error);
@@ -651,49 +701,15 @@ const simulateDateChange = async (daysToAdd = 1) => {
 
   // 일일 리셋 및 점수 업데이트 함수 수정
   const dailyReset = async () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getCurrentLocalDate();
+    // 마지막 리셋 날짜 가져오기
     const lastResetDay = await AsyncStorage.getItem('lastResetDay');
     
-    // 하루가 지났는지 확인
-    if (lastResetDay !== today) {
+    console.log('날짜 확인:', { 현재날짜: today, 마지막리셋날짜: lastResetDay });
+    
+    // 하루가 지났는지 확인 (lastResetDay가 없거나 today와 다른 경우)
+    if (!lastResetDay || lastResetDay !== today) {
       console.log('날짜가 변경되어 빙고보드를 리셋합니다:', lastResetDay, '->', today);
-      
-      // 현재 사용자 확인
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        try {
-          // Firestore 문서 참조 가져오기
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          
-          // 현재 사용자 데이터 가져오기
-          const docSnapshot = await getDoc(userDocRef);
-          
-          if (docSnapshot.exists) {
-            const userData = docSnapshot.data() || {};
-            
-            // 누적 점수 가져오기 (Firebase에 저장된 값)
-            const totalScore = userData.totalScore || 0;
-            const streak = userData.streak || 0;
-            const lastAttendanceDate = userData.lastAttendanceDate || null;
-
-            await updateDoc(userDocRef, {
-              streak: 0,
-              updatedAt: serverTimestamp()
-            });
-
-            // 로컬 상태 업데이트 - 누적 점수는 유지
-            setScoreState(prev => ({
-              ...prev,
-              totalScore: totalScore, // Firebase에서 가져온 누적 점수로 설정
-              streak: streak,
-              lastAttendanceDate: lastAttendanceDate,
-              //bingoCount: 0 // 빙고 수만 리셋
-            }));
-          }
-        } catch (error) {
-          console.error('점수 업데이트 오류:', error);
-        }
-      }
       
       // 완료 상태 리셋
       await AsyncStorage.setItem('completedTasks', JSON.stringify({}));
@@ -706,7 +722,20 @@ const simulateDateChange = async (daysToAdd = 1) => {
       
       // 보드 다시 생성
       await syncTasksWithBoard();
+      
+      // 빙고 카운트 리셋
+      setLastBingoCount(0);
+      
+      // 점수 상태 업데이트 - 빙고 카운트만 리셋
+      setScoreState(prev => ({
+        ...prev,
+        bingoCount: 0
+      }));
+      
+      return true; // 리셋 발생
     }
+    
+    return false; // 리셋 없음
   };
 
   // useEffect 훅에 dailyReset 추가
@@ -818,6 +847,25 @@ const simulateDateChange = async (daysToAdd = 1) => {
       console.error('점수 동기화 오류:', error);
     }
   };
+
+  // 컴포넌트 내부에 AppState 리스너 추가
+  useEffect(() => {
+    // 앱 상태 변경 리스너
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active') {
+        // 앱이 활성화될 때마다 날짜 확인
+        dailyReset();
+      }
+    });
+    
+    // 컴포넌트 마운트 시 초기 실행
+    dailyReset();
+    syncUserScoreFromFirebase();
+    
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -976,7 +1024,7 @@ const styles = StyleSheet.create({
         elevation: 5,
       },
       text: {
-        fontSize: 12,
+        fontSize: 10,
         textAlign: 'center',
         color: '#fff',
         fontWeight: '400',

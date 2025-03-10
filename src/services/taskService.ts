@@ -6,12 +6,28 @@ export const getTasksKey = (size: number) => `tasks_${size}x${size}`;
 
 export const loadTasks = async (size: number): Promise<Task[]> => {
   const key = getTasksKey(size);
-  const savedTasks = await AsyncStorage.getItem(key);
-  if (savedTasks) return JSON.parse(savedTasks);
-
-  const initialTasks = getDefaultTasks(size); // 샘플 데이터
-  await saveTasks(size, initialTasks); // 최초 사용 시 저장
-  return initialTasks;
+  try {
+    const savedTasks = await AsyncStorage.getItem(key);
+    console.log('로드된 태스크 데이터:', savedTasks);
+    
+    if (savedTasks) {
+      const parsedTasks = JSON.parse(savedTasks);
+      // 태스크가 비어있는지 확인
+      if (parsedTasks.length > 0 && parsedTasks.some((task: Task) => task.title)) {
+        return parsedTasks;
+      }
+    }
+    
+    // 저장된 태스크가 없거나 비어있으면 기본 태스크 생성
+    const initialTasks = getDefaultTasks(size);
+    await saveTasks(size, initialTasks);
+    return initialTasks;
+  } catch (error) {
+    console.error('태스크 로드 중 오류:', error);
+    // 오류 발생 시 기본 태스크 반환
+    const initialTasks = getDefaultTasks(size);
+    return initialTasks;
+  }
 };
 
 export const saveTasks = async (size: number, tasks: Task[]) => {
