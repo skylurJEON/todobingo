@@ -83,7 +83,7 @@ export const signInWithApple = async () => {
       displayName: user.displayName || '',
       totalScore: 0,
       bingoCount: 0,
-      streak: 0,
+      streak: 1,
       lastAttendanceDate: null,
       createdAt: serverTimestamp(),
       provider: 'apple.com'
@@ -106,7 +106,7 @@ export const signUp = async (email: string, password: string, displayName: strin
       displayName,
       totalScore: 0,
       bingoCount: 0,
-      streak: 0,
+      streak: 1,
       lastAttendanceDate: null,
       createdAt: serverTimestamp()
     });

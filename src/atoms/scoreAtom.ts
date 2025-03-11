@@ -12,7 +12,7 @@ export const scoreAtom = atom<ScoreState>({
   default: {
     totalScore: 0,
     bingoCount: 0,
-    streak: 0,
+    streak: 1,
     lastAttendanceDate: null,
   },
 });

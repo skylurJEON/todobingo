@@ -364,6 +364,12 @@ const simulateDateChange = async (daysToAdd = 1) => {
     // 완료 상태 불러오기
     const completedTasksJson = await AsyncStorage.getItem('completedTasks');
     const completedTasks = completedTasksJson ? JSON.parse(completedTasksJson) : {};
+
+    // 마지막 빙고 카운트 불러오기
+    const lastBingoCountStr = await AsyncStorage.getItem('lastBingoCount');
+    const savedBingoCount = lastBingoCountStr ? parseInt(lastBingoCountStr) : 0;
+    setLastBingoCount(savedBingoCount);
+
     
     // 빙고 보드 생성
     const filledBoard = Array.from({ length: totalCells }, (_, i) => {
@@ -437,73 +443,41 @@ const simulateDateChange = async (daysToAdd = 1) => {
     // 이전 빙고 수와 현재 빙고 수 비교
     const bingoDifference = bingoCount - lastBingoCount;
     
-    // 빙고 수 변화에 따른 처리
-    if (bingoDifference > 0) {
-      // 새로운 빙고가 생겼을 때
-      // Alert.alert(
-      //   '🎉 ' + t('bingo.complete'), 
-      //   `${t('bingo.congratulations')} ${bingoCount} ${t('bingo.congratulations_text')}`,
-      //   [{ text: t('common.confirm'), style: 'default' }]
-      // );
-
-      // 출석 체크
-      await checkAttendance();
-
-    } else if (bingoDifference < 0) {
-      // 빙고가 취소되었을 때
-      // Alert.alert(
-      //   '빙고 취소', 
-      //   `${Math.abs(bingoDifference)}줄의 빙고가 취소되었습니다.`,
-      //   [{ text: '확인', style: 'default' }]
-      // );
-    }
-    
-    // 현재 빙고 수 저장
-    setLastBingoCount(bingoCount);
-    
     // 점수 업데이트 - 빙고 수 변화에 따라 점수 조정
     if (bingoDifference !== 0) {
-      // 빙고 점수 업데이트
       const currentUser = auth.currentUser;
       if (currentUser) {
         try {
           const userDocRef = doc(db, 'users', currentUser.uid);
-          getDoc(userDocRef).then(docSnapshot => {
-            if (docSnapshot.exists) {
-              const userData = docSnapshot.data();
-              const currentTotalScore = userData?.totalScore || 0;
+          const docSnapshot = await getDoc(userDocRef);
+
+          if (docSnapshot.exists) {
+            const userData = docSnapshot.data();
+            const currentTotalScore = userData?.totalScore || 0;
+            const scoreChange = bingoDifference * 100;
+            const newTotalScore = Math.max(0, currentTotalScore + scoreChange);
               
-              // 빙고 변화에 따른 점수 조정 (빙고당 100점)
-              const scoreChange = bingoDifference * 100;
-              const newTotalScore = Math.max(0, currentTotalScore + scoreChange);
-              
-              // Firebase 업데이트
-              updateDoc(userDocRef, {
-                totalScore: newTotalScore,
-                bingoCount: bingoCount,
-                updatedAt: serverTimestamp()
-              });
-              
-              // 로컬 상태 업데이트
-              setScoreState(prev => ({
-                ...prev,
-                totalScore: newTotalScore,
-                bingoCount: bingoCount
-              }));
-              
-              console.log('빙고 점수 업데이트:', {
-                이전점수: currentTotalScore,
-                변화: scoreChange,
-                새점수: newTotalScore,
-                빙고수: bingoCount
-              });
+            // 로컬 상태 업데이트
+            setScoreState(prev => ({
+              ...prev,
+              totalScore: newTotalScore,
+              bingoCount: bingoCount
+            }));
+
+            // Firebase 업데이트
+            await updateDoc(userDocRef, {
+              totalScore: newTotalScore,
+              bingoCount: bingoCount,
+              updatedAt: serverTimestamp()
+            });
             }
-          });
-        } catch (error) {
-          console.error('점수 업데이트 오류:', error);
+          } catch (error) {
+            console.error('점수 업데이트 오류:', error);
+          }
         }
-      }
     }
+     // 현재 빙고 수 저장
+     setLastBingoCount(bingoCount);
   };
 
 
@@ -661,6 +635,39 @@ const simulateDateChange = async (daysToAdd = 1) => {
     setTaskModalVisible(true);
   };
 
+  const handleAppStateChange = async (nextAppState: string) => {
+    if (nextAppState === 'active') {
+      await dailyReset();
+    } else if (nextAppState === 'background' || nextAppState === 'inactive') {
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        try {
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          const docSnapshot = await getDoc(userDocRef);
+          
+          if (docSnapshot.exists) {
+            const userData = docSnapshot.data();
+            // 현재 상태와 비교하여 실제로 변경된 경우에만 업데이트
+            if (
+              userData?.totalScore !== scoreState.totalScore ||
+              userData?.streak !== scoreState.streak ||
+              userData?.lastAttendanceDate !== scoreState.lastAttendanceDate
+            ) {
+              await updateDoc(userDocRef, {
+                totalScore: scoreState.totalScore,
+                streak: scoreState.streak,
+                lastAttendanceDate: scoreState.lastAttendanceDate,
+                updatedAt: serverTimestamp()
+              });
+            }
+          }
+        } catch (error) {
+          console.error('앱 상태 변경 시 데이터 저장 오류:', error);
+        }
+      }
+    }
+  };
+
   const handleTimerComplete = () => {
     if (selectedTask) {
       // 할 일 자동 완료 처리
@@ -691,13 +698,13 @@ const simulateDateChange = async (daysToAdd = 1) => {
     }
   };
 
-  useEffect(() => {
-    // 로그인 상태일 때만 점수 동기화
-    const currentUser = auth.currentUser;
-    if (currentUser) {
-      updateScore(scoreState);
-    }
-  }, [scoreState]);
+  // useEffect(() => {
+  //   // 로그인 상태일 때만 점수 동기화
+  //   const currentUser = auth.currentUser;
+  //   if (currentUser) {
+  //     updateScore(scoreState);
+  //   }
+  // }, [scoreState]);
 
   // 일일 리셋 및 점수 업데이트 함수 수정
   const dailyReset = async () => {
@@ -724,6 +731,7 @@ const simulateDateChange = async (daysToAdd = 1) => {
       await syncTasksWithBoard();
       
       // 빙고 카운트 리셋
+      await AsyncStorage.setItem('lastBingoCount', '0');
       setLastBingoCount(0);
       
       // 점수 상태 업데이트 - 빙고 카운트만 리셋
@@ -738,11 +746,12 @@ const simulateDateChange = async (daysToAdd = 1) => {
     return false; // 리셋 없음
   };
 
+  //중복 초기화임
   // useEffect 훅에 dailyReset 추가
-  useEffect(() => {
-    dailyReset();
-    syncUserScoreFromFirebase();
-  }, []); // 컴포넌트 마운트 시 실행
+  // useEffect(() => {
+  //   dailyReset();
+  //   syncUserScoreFromFirebase();
+  // }, []); // 컴포넌트 마운트 시 실행
 
   // 빙고 취소 로직 추가
   const cancelBingo = async (taskId: number) => {
@@ -776,22 +785,12 @@ const simulateDateChange = async (daysToAdd = 1) => {
       
       if (docSnapshot.exists) {
         const userData = docSnapshot.data();
-        
         // 기존 점수 가져오기
         const currentTotalScore = userData?.totalScore || 0;
         
-        // 오늘 이미 점수를 업데이트했는지 확인
-        //const lastScoreDate = await AsyncStorage.getItem('lastScoreDate');
-        
-        // 오늘 처음 점수를 업데이트하는 경우에만 누적
-        let updatedScore = currentTotalScore;
-        //if (lastScoreDate !== today) {
-        //  updatedScore = currentTotalScore + newScore;
-        //  await AsyncStorage.setItem('lastScoreDate', today);
-        //}
-        
-        updatedScore = currentTotalScore + newScore;
-        // 업데이트
+        const updatedScore = currentTotalScore + newScore;
+
+        // firebase업데이트
         await updateDoc(userDocRef, {
           totalScore: updatedScore,
           bingoCount: bingoCount,
@@ -851,13 +850,29 @@ const simulateDateChange = async (daysToAdd = 1) => {
   // 컴포넌트 내부에 AppState 리스너 추가
   useEffect(() => {
     // 앱 상태 변경 리스너
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      if (nextAppState === 'active') {
-        // 앱이 활성화될 때마다 날짜 확인
-        dailyReset();
-      }
-    });
-    
+    // const subscription = AppState.addEventListener('change', nextAppState => {
+    //   if (nextAppState === 'active') {
+    //     // 앱이 활성화될 때마다 날짜 확인
+    //     dailyReset();
+    //   }else if (nextAppState === 'background' || nextAppState === 'inactive') {
+    //     // 앱이 백그라운드로 가거나 비활성화될 때
+    //     // 현재 점수 상태를 Firebase에 강제 저장
+    //     const currentUser = auth.currentUser;
+    //     if (currentUser) {
+    //       const userDocRef = doc(db, 'users', currentUser.uid);
+    //       updateDoc(userDocRef, {
+    //         totalScore: scoreState.totalScore,
+    //         streak: scoreState.streak,
+    //         lastAttendanceDate: scoreState.lastAttendanceDate,
+    //         updatedAt: serverTimestamp()
+    //       }).catch(error => {
+    //         console.error('앱 종료 시 데이터 저장 오류:', error);
+    //       });
+    //     }
+    //   }
+    // });
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
     // 컴포넌트 마운트 시 초기 실행
     dailyReset();
     syncUserScoreFromFirebase();
