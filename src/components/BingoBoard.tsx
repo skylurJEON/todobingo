@@ -167,51 +167,20 @@ export default function BingoBoard() {
   const totalCells = bingoSize * bingoSize;
   const centerIndex = Math.floor(totalCells / 2);
 
-  //날짜변경테스트
-  const [devModeEnabled, setDevModeEnabled] = useState(false);
-  const toggleDevMode = () => {
-    setDevModeEnabled(!devModeEnabled);
+ 
+  // 로컬 날짜 문자열 반환 함수
+  const getLocalDateString = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
-
-  const simulateDateChange = async (daysToAdd = 1) => {
-    if (!devModeEnabled) {
-      Alert.alert('개발자 모드를 활성화');
-      return;
-    }
-
-    try {
-      // 현재 앱에서 lastResetDay를 가져와 날짜를 daysToAdd만큼 증가
-      const lastResetDay = await AsyncStorage.getItem('lastResetDay');
-      const baseDate = lastResetDay
-        ? new Date(lastResetDay)
-        : new Date(); // 없으면 오늘 날짜
-
-      baseDate.setDate(baseDate.getDate() + daysToAdd);
-      const newDateStr = baseDate.toISOString().split('T')[0]; // YYYY-MM-DD
-
-      // 날짜를 변경한 값으로 저장
-      await AsyncStorage.setItem('lastResetDay', newDateStr);
-      await AsyncStorage.setItem('lastRandomizeDate', newDateStr);
-
-      // 완료 상태도 리셋 (완료 상태 모두 false 처리)
-      await AsyncStorage.setItem('completedTasks', JSON.stringify({}));
-
-      // 빙고 보드 다시 불러오기(하루 지났다고 판별)
-      await syncTasksWithBoard();
-
-      Alert.alert(
-        '개발자 모드',
-        `${daysToAdd}일 뒤 시뮬레이션 . (lastResetDay=${newDateStr})`
-      );
-    } catch (err) {
-      console.error('simulateDateChange 오류:', err);
-    }
-  };
-
+  
 
   const syncTasksWithBoard = async () => {
     // 날짜 체크
-    const currentDateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    //const currentDateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const currentDateStr = getLocalDateString(new Date());
     const lastRandomizeDate = await AsyncStorage.getItem('lastRandomizeDate');
     const sizeKey = `bingoSize_${bingoSize}`;
     const lastSizeKey = await AsyncStorage.getItem('lastBingoSizeKey');
@@ -399,63 +368,74 @@ const checkAttendance = async () => {
   const currentUser = auth.currentUser;
   if (!currentUser) return;
 
-  const today = getCurrentLocalDate(); // OS 날짜
+  const today = getCurrentLocalDate(); // 예: "2025-03-14"
   try {
-    const userDocRef = doc(getFirestore(), 'users', currentUser.uid);
-    const docSnapshot = await getDoc(userDocRef);
-    if (!docSnapshot.exists) return;
+    // 로컬 캐시에서 마지막 출석 날짜와 streak 읽기
+    const cachedLastAttendanceDate = await AsyncStorage.getItem('localLastAttendanceDate');
+    const cachedStreakStr = await AsyncStorage.getItem('localStreak');
+    let localStreak = cachedStreakStr ? parseInt(cachedStreakStr) : 0;
 
-    const userData = docSnapshot.data();
-    const lastAttendanceDate = userData?.lastAttendanceDate;
-    let newStreak = userData?.streak || 0;
-    let currentTotalScore = userData?.totalScore || 0;
-
-    // 이미 오늘 출석했다면 패스
-    if (lastAttendanceDate === today) {
-      console.log('이미 오늘 출석했습니다.');
+    // 이미 오늘 출석한 경우 처리
+    if (cachedLastAttendanceDate === today) {
+      console.log('이미 오늘 출석했습니다 (로컬 캐시 기준).');
       return;
     }
 
-    // 어제 출석했다면 streak++, 그 외는 streak=1
+    // 어제 날짜를 로컬 기준 문자열로 계산
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const yesterdayStr = getLocalDateString(yesterday);
 
-    if (lastAttendanceDate === yesterdayStr) {
-      newStreak += 1; 
+    // 어제 출석했으면 streak 증가, 아니면 1로 재설정
+    if (cachedLastAttendanceDate === yesterdayStr) {
+      localStreak += 1;
     } else {
-      newStreak = 1;
+      localStreak = 1;
     }
 
-    // 출석 보너스 (예: 첫날 50, 2일차 60, ...)
-    let attendanceBonus = 0;
-    if (newStreak === 1) attendanceBonus = 50;
-    else if (newStreak === 2) attendanceBonus = 60;
-    else if (newStreak === 3) attendanceBonus = 70;
-    else if (newStreak === 4) attendanceBonus = 80;
-    else if (newStreak === 5) attendanceBonus = 90;
-    else if (newStreak >= 6) attendanceBonus = 100;
+    // Firestore에서 현재 총 점수를 가져옵니다.
+    const userDocRef = doc(getFirestore(), 'users', currentUser.uid);
+    const docSnapshot = await getDoc(userDocRef);
+    const currentTotalScore = docSnapshot.exists ? (docSnapshot.data()?.totalScore || 0) : 0;
 
-    // 누적 점수 합산
+    // 출석 보너스 계산 (streak에 따라 보너스 점수 증가)
+    let attendanceBonus = 0;
+    if (localStreak === 1) attendanceBonus = 50;
+    else if (localStreak === 2) attendanceBonus = 60;
+    else if (localStreak === 3) attendanceBonus = 70;
+    else if (localStreak === 4) attendanceBonus = 80;
+    else if (localStreak === 5) attendanceBonus = 90;
+    else if (localStreak >= 6) attendanceBonus = 100;
+
     const newTotalScore = currentTotalScore + attendanceBonus;
 
-    // 로컬 scoreState도 갱신
+    // 로컬 상태 업데이트
     setScoreState(prev => ({
       ...prev,
       totalScore: newTotalScore,
-      streak: newStreak,
+      streak: localStreak,
       lastAttendanceDate: today,
     }));
 
     // Firestore 업데이트
     await updateDoc(userDocRef, {
       totalScore: newTotalScore,
-      streak: newStreak,
+      streak: localStreak,
       lastAttendanceDate: today,
       updatedAt: serverTimestamp(),
     });
 
-    //Alert.alert('출석 체크', `${newStreak}일 연속 출석! +${attendanceBonus}점`);
+    // 로컬 AsyncStorage에 최신 출석 정보 캐싱
+    await AsyncStorage.setItem('localLastAttendanceDate', today);
+    await AsyncStorage.setItem('localStreak', localStreak.toString());
+
+    console.log('출석 체크 (로컬 캐시 사용):', {
+      streak: localStreak,
+      attendanceBonus: attendanceBonus,
+      newTotalScore: newTotalScore,
+      lastAttendanceDate: today
+    });
+
   } catch (error) {
     console.error('출석 체크 오류:', error);
   }
@@ -600,44 +580,6 @@ const checkAttendance = async () => {
     }
   };
 
-  // 점수 업데이트 함수 
-  const updateScoreAndStreak = async (newScore: number, bingoCount: number) => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) return;
-    
-    const today = new Date().toISOString().split('T')[0];
-    
-    try {
-      // 사용자 문서 참조
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      const docSnapshot = await getDoc(userDocRef);
-      
-      if (docSnapshot.exists) {
-        const userData = docSnapshot.data();
-        // 기존 점수 가져오기
-        const currentTotalScore = userData?.totalScore || 0;
-        
-        const updatedScore = currentTotalScore + newScore;
-
-        // firebase업데이트
-        await updateDoc(userDocRef, {
-          totalScore: updatedScore,
-          bingoCount: bingoCount,
-          updatedAt: serverTimestamp()
-        });
-        
-        // 로컬 상태 업데이트
-        setScoreState(prev => ({
-          ...prev,
-          totalScore: updatedScore,  
-          bingoCount: bingoCount
-        }));
-        
-      }
-    } catch (error) {
-      console.error('점수 업데이트 오류:', error);
-    }
-  };
 
   // Firebase에서 사용자 점수 동기화
   const syncUserScoreFromFirebase = async () => {
@@ -757,43 +699,6 @@ const checkAttendance = async () => {
         </View>
       </Modal>
 
-      {/* 개발자 모드 토글 */}
-      <View style={styles.devModeContainer}>
-        <TouchableOpacity 
-          style={[styles.devModeButton, devModeEnabled && styles.devModeButtonActive]}
-          onPress={toggleDevMode}
-        >
-          <Text style={styles.devModeButtonText}>
-            {devModeEnabled ? '개발자 모드 ON' : 'DEV'}
-          </Text>
-        </TouchableOpacity>
-        
-        {/* 개발자 모드가 켜져 있을 때만 보이게 할 수 있는 예시 UI */}
-        {devModeEnabled && (
-          <View style={{ marginTop: 10 }}>
-            <TouchableOpacity 
-              style={styles.devButton}
-              onPress={() => simulateDateChange(1)}
-            >
-              <Text style={styles.devButtonText}>+1일</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.devButton}
-              onPress={() => simulateDateChange(2)}
-            >
-              <Text style={styles.devButtonText}>+2일</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.devButton}
-              onPress={() => simulateDateChange(7)}
-            >
-              <Text style={styles.devButtonText}>+7일</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
     </View>
   );
 }
