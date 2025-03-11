@@ -57,9 +57,6 @@ export const signInWithApple = async () => {
 
   const appleCredential = firebase.auth.AppleAuthProvider.credential(identityToken, nonce);
 
-  // 4). use the created `AppleAuthProvider` credential to start a Firebase auth request,
-  //     in this example `signInWithCredential` is used, but you could also call `linkWithCredential`
-  //     to link the account to an existing user
   const userCredential = await firebase.auth().signInWithCredential(appleCredential);
 
   // user is now signed in, any Firebase `onAuthStateChanged` listeners you have will trigger
@@ -83,7 +80,7 @@ export const signInWithApple = async () => {
       displayName: user.displayName || '',
       totalScore: 0,
       bingoCount: 0,
-      streak: 1,
+      streak: 0,
       lastAttendanceDate: null,
       createdAt: serverTimestamp(),
       provider: 'apple.com'
@@ -106,7 +103,7 @@ export const signUp = async (email: string, password: string, displayName: strin
       displayName,
       totalScore: 0,
       bingoCount: 0,
-      streak: 1,
+      streak: 0,
       lastAttendanceDate: null,
       createdAt: serverTimestamp()
     });
@@ -179,8 +176,8 @@ export const fetchRankings = async (): Promise<RankingData[]> => {
       id: doc.id,
       rank: index + 1,
       displayName: doc.data().displayName || '익명',
-      totalScore: doc.data().totalScore || 0,
-      streak: doc.data().streak || 0,
+      totalScore: doc.data().totalScore,
+      streak: doc.data().streak,
     }));
   } catch (error) {
     console.error('랭킹 데이터 가져오기 오류:', error);
@@ -212,8 +209,8 @@ export const fetchMyRanking = async (): Promise<RankingData | null> => {
       id: user.uid,
       rank: myRank,
       displayName: myData.displayName || '익명',
-      totalScore: myData.totalScore || 0,
-      streak: myData.streak || 0,
+      totalScore: myData.totalScore,
+      streak: myData.streak,
     };
   } catch (error) {
     console.error('내 랭킹 가져오기 오류:', error);
