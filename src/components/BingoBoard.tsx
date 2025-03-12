@@ -206,7 +206,23 @@ export default function BingoBoard() {
       }
       setTasks(currentTasks);
     }
+
+    // 사이즈가 변경되면 기본 태스크 로드
+    if (sizeKey !== lastSizeKey) {
+      // 해당 사이즈의 기본 태스크 로드
+      const defaultTasks = await loadTasks(bingoSize);
+      setTasks(defaultTasks);
+      currentTasks = defaultTasks;
     
+      // 현재 사이즈 키 저장
+      await AsyncStorage.setItem('lastBingoSizeKey', sizeKey);
+    
+      // 마지막 랜덤화 날짜 초기화하여 새로운 랜덤 배치 적용
+      //await AsyncStorage.removeItem('lastRandomizeDate');
+    }
+
+
+
     // 랜덤화 필요 여부 체크 (하루가 지났거나, 저장된 배열이 없는 경우)
     const needsRandomize = !lastRandomizeDate || lastRandomizeDate !== currentDateStr;
     
@@ -233,25 +249,15 @@ export default function BingoBoard() {
       
       // 마지막 랜덤화 날짜 저장
       await AsyncStorage.setItem('lastRandomizeDate', currentDateStr);
-    } else if (sizeKey !== lastSizeKey) {
-      // 사이즈만 변경된 경우 - 해당 사이즈의 저장된 태스크 불러오기
-      const savedTasks = await AsyncStorage.getItem(`tasks_${bingoSize}x${bingoSize}`);
-      if (savedTasks) {
-        const parsedTasks = JSON.parse(savedTasks);
-        setTasks(parsedTasks);
-        currentTasks = parsedTasks;
-      }
-      
-      // 현재 사이즈 키 저장
-      await AsyncStorage.setItem('lastBingoSizeKey', sizeKey);
-    }
+    } 
     
-    // 완료 상태 불러오기
-    const completedTasksJson = await AsyncStorage.getItem('completedTasks');
+    
+    // 현재 사이즈에 해당하는 완료 상태 불러오기
+    const completedTasksJson = await AsyncStorage.getItem(`completedTasks_${bingoSize}`);
     const completedTasks = completedTasksJson ? JSON.parse(completedTasksJson) : {};
 
-    // 마지막 빙고 카운트 불러오기
-    const lastBingoCountStr = await AsyncStorage.getItem('lastBingoCount');
+    // 현재 사이즈의 마지막 빙고 카운트 불러오기
+    const lastBingoCountStr = await AsyncStorage.getItem(`lastBingoCount_${bingoSize}`);
     const savedBingoCount = lastBingoCountStr ? parseInt(lastBingoCountStr) : 0;
     setLastBingoCount(savedBingoCount);
     
@@ -360,8 +366,8 @@ export default function BingoBoard() {
     }
      // 현재 빙고 수 저장
      setLastBingoCount(bingoCount);
-  };
-
+    await AsyncStorage.setItem(`lastBingoCount_${bingoSize}`, bingoCount.toString());
+  }
 
 // 출석 체크 로직 (streak 증가)
 const checkAttendance = async () => {
@@ -451,13 +457,13 @@ const checkAttendance = async () => {
     setBingoBoard(updatedBoard);
     
     // 태스크 ID 기준으로 완료 상태 저장
-    const completedTasksJson = await AsyncStorage.getItem('completedTasks');
+    const completedTasksJson = await AsyncStorage.getItem(`completedTasks_${bingoSize}`);
     const completedTasks = completedTasksJson ? JSON.parse(completedTasksJson) : {};
     
     const updatedTask = updatedBoard.find(cell => cell.id === taskId);
     if (updatedTask) {
       completedTasks[taskId] = updatedTask.completed;
-      await AsyncStorage.setItem('completedTasks', JSON.stringify(completedTasks));
+      await AsyncStorage.setItem(`completedTasks_${bingoSize}`, JSON.stringify(completedTasks));
     }
   
     console.log('완료 상태 변경:', taskId);
@@ -558,10 +564,12 @@ const checkAttendance = async () => {
       console.log('날짜가 변경되어 빙고보드를 리셋합니다:', lastResetDay, '->', today);
       
       // 완료 상태 리셋
-      await AsyncStorage.setItem('completedTasks', JSON.stringify({}));
+      await AsyncStorage.setItem('completedTasks_3', JSON.stringify({}));
+      await AsyncStorage.setItem('completedTasks_5', JSON.stringify({}));
       
       // 빙고 카운트 리셋
-      await AsyncStorage.setItem('lastBingoCount', '0');
+      await AsyncStorage.setItem('lastBingoCount_3', '0');
+      await AsyncStorage.setItem('lastBingoCount_5', '0');
 
       // 마지막 리셋 날짜 업데이트
       await AsyncStorage.setItem('lastResetDay', today);
@@ -625,6 +633,9 @@ const checkAttendance = async () => {
   }, []);
 
   useEffect(() => {
+    // 보드 크기가 바뀔 때 lastBingoCount를 초기화합니다.
+    AsyncStorage.setItem('lastBingoCount', '0');
+    setLastBingoCount(0);
     syncTasksWithBoard();
   }, [tasks, bingoSize]);
 
