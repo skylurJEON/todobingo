@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { fetchRankings, fetchMyRanking } from '../firebase/firebaseService';
+import { fetchRankings, fetchMyRanking, subscribeMyRanking } from '../firebase/firebaseService';
 import { getAuth } from '@react-native-firebase/auth';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -14,7 +14,6 @@ interface RankingData {
     displayName: string;
     totalScore: number;
     streak: number;
-    // 필요한 다른 필드들도 추가할 수 있습니다
   }
 
 // 네비게이션 타입 정의
@@ -25,8 +24,6 @@ type RootStackParamList = {
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
-// Firebase 인스턴스 가져오기
-const auth = getAuth();
 
 export default function RankScreen() {
   const { t } = useTranslation();
@@ -35,6 +32,7 @@ export default function RankScreen() {
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const navigation = useNavigation<NavigationProp>();
+  const auth = getAuth();
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(user => {
@@ -43,6 +41,25 @@ export default function RankScreen() {
   
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      // 구독을 통해 내 랭킹 데이터를 실시간으로 업데이트
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const unsubscribeRanking = subscribeMyRanking(currentUser.uid, (data) => {
+          setMyRanking({
+            id: currentUser.uid,
+            rank: data.rank,
+            displayName: data.displayName,
+            totalScore: data.totalScore,
+            streak: data.streak,
+          });
+        });
+        return () => unsubscribeRanking();
+      }
+    }
+  }, [isLoggedIn]);
 
   useEffect(() => {
     loadRankings();

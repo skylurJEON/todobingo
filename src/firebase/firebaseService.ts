@@ -22,7 +22,8 @@ import {
   orderBy, 
   limit, 
   runTransaction,
-  serverTimestamp
+  serverTimestamp,
+  onSnapshot
 } from '@react-native-firebase/firestore';
 import { appleAuth } from '@invertase/react-native-apple-authentication';
 
@@ -216,4 +217,13 @@ export const fetchMyRanking = async (): Promise<RankingData | null> => {
     console.error('내 랭킹 가져오기 오류:', error);
     return null;
   }
+};
+
+export const subscribeMyRanking = (uid: string, callback: (data: any) => void) => {
+  const userDocRef = doc(db, 'users', uid);
+  return onSnapshot(userDocRef, (docSnapshot) => {
+    if (docSnapshot.exists) {
+      callback(docSnapshot.data());
+    }
+  });
 };
