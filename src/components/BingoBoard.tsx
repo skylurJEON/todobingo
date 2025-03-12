@@ -23,9 +23,11 @@ import {
 import { useTranslation } from 'react-i18next';
 import { loadTasks } from '../services/taskService';
 
-import { Vibration } from 'react-native';
-
-
+import { syncTasksWithBoard } from '../services/boardService';
+import { checkAttendance, dailyReset, initializeAttendance } from '../services/attendanceService';
+import { getCurrentLocalDate } from '../utils/dateUtils';
+import BingoCell from './BingoCell';
+import { syncUserScoreFromFirebase } from '../services/scoreService';
 
 // 네비게이션 타입 정의
 type RootStackParamList = {
@@ -35,114 +37,6 @@ type RootStackParamList = {
   
 type NavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
-interface BingoCellProps {
-  title: string;
-  completed: boolean;
-  onPress: () => void;
-  onLongPress: (title: string) => void;
-}
-
-
-function BingoCell({ title, completed, onPress, onLongPress }: BingoCellProps) {
-    const wobbleAnim = useRef(new Animated.Value(0)).current;
-    const scaleAnim = useRef(new Animated.Value(1)).current;
-
-    useEffect(() => {
-      if (completed) {
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(wobbleAnim, {
-              toValue: 1,
-              duration: 1500,
-              useNativeDriver: true,
-            }), 
-            Animated.timing(wobbleAnim, {
-              toValue: 0,
-              duration: 1500,
-              useNativeDriver: true,
-            }),
-          ])
-        ).start();
-      } else {
-        wobbleAnim.setValue(0);
-      }
-    }, [completed]);
-  
-    const animatedStyle = completed ? {
-      transform: [
-        {
-          rotate: wobbleAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: ['-3deg', '3deg'],
-          }),
-        },
-        { scale: scaleAnim }
-      ],
-    } : {
-      transform: [
-        { scale: scaleAnim }
-      ]
-    };
-
-    const handleLongPress = () => {
-      // 길게 누를 때 확대 애니메이션
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 1.2,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        })
-      ]).start();
-      
-      // 모달 표시 함수 호출
-      onLongPress(title);
-    };
-  
-    return (
-      <Animated.View style={[animatedStyle]}>
-        <TouchableOpacity 
-          onPress={onPress}
-          onLongPress={handleLongPress}
-          delayLongPress={300}
-        >
-          <LinearGradient
-            colors={completed ? ['#8EB69B','#235347' ] : ['#000','#222']}
-            locations={[0.2, 1]}
-            start={{ x: 0 , y: 1 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.cell, completed && styles.completedCell]}
-          >
-            <Text style={[styles.text, completed && styles.completedText]}>
-              {title || ' '}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </Animated.View>
-    );
-}
-
-
-const randomizeTasks = (tasks: Task[]) => {
-  const shuffled = tasks
-    .map((task) => ({ ...task, sort: Math.random() }))
-    .sort((a, b) => a.sort - b.sort)
-    .map(({ sort, ...task }) => task);
-  return shuffled;
-};
-
-// 현재 날짜를 로컬 시간대 기준으로 가져오는 함수
-const getCurrentLocalDate = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
 
 export default function BingoBoard() {
   const [tasks, setTasks] = useRecoilState(tasksAtom);
@@ -161,293 +55,135 @@ export default function BingoBoard() {
   // Firebase 인스턴스 가져오기
   const auth = getAuth();
   const db = getFirestore();
-  
   const { t } = useTranslation();
 
   const totalCells = bingoSize * bingoSize;
   const centerIndex = Math.floor(totalCells / 2);
 
- 
-  // 로컬 날짜 문자열 반환 함수
-  const getLocalDateString = (date: Date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-  
-
-  const syncTasksWithBoard = async () => {
-    // 날짜 체크
-    //const currentDateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const currentDateStr = getLocalDateString(new Date());
-    const lastRandomizeDate = await AsyncStorage.getItem('lastRandomizeDate');
-    const sizeKey = `bingoSize_${bingoSize}`;
-    const lastSizeKey = await AsyncStorage.getItem('lastBingoSizeKey');
-    
-    // 태스크 배열 가져오기
-    let currentTasks = [...tasks];
-
-    // 태스크가 비어있는지 확인
-    const hasEmptyTasks = currentTasks.length === 0 || 
-                          currentTasks.every(task => !task.title);
-
-    // 태스크가 비어있으면 저장된 태스크 또는 기본 태스크 로드
-    if (hasEmptyTasks) {
-      const savedTasksJson = await AsyncStorage.getItem(`tasks_${bingoSize}x${bingoSize}`);
-      if (savedTasksJson) {
-        currentTasks = JSON.parse(savedTasksJson);
-        console.log('저장된 태스크 로드:', currentTasks);
-      } else {
-        // 저장된 태스크가 없으면 기본 태스크 로드
-        const defaultTasks = await loadTasks(bingoSize);
-        currentTasks = defaultTasks;
-        console.log('기본 태스크 로드:', defaultTasks);
+  // 동기화: 보드 데이터 불러오기
+  const syncBoard = async () => {
+    try {
+      // 현재 점수 백업
+      const currentScore = scoreState.totalScore;
+      
+      // boardService의 syncTasksWithBoard 함수 활용
+      const boardTasks = await syncTasksWithBoard(tasks, bingoSize, t);
+      
+      // 완료된 태스크 로드
+      const completedTasksJson = await AsyncStorage.getItem(`completedTasks_${bingoSize}`);
+      const completedTasks = completedTasksJson ? JSON.parse(completedTasksJson) : {};
+      
+      // 빙고 보드 초기화
+      const lastBingoCountStr = await AsyncStorage.getItem(`lastBingoCount_${bingoSize}`);
+      const savedLastBingoCount = lastBingoCountStr ? parseInt(lastBingoCountStr) : 0;
+      setLastBingoCount(savedLastBingoCount);
+      
+      // 빙고 보드 설정 (완료 상태 적용)
+      const newBoard = boardTasks.map(task => ({
+        id: task.id,
+        title: task.title,
+        completed: completedTasks[task.id] === true || task.completed
+      }));
+      
+      console.log('빙고 보드 생성:', newBoard.length, '개 셀');
+      setBingoBoard(newBoard);
+      
+      // 점수 복원
+      if (currentScore > 0) {
+        setTimeout(() => {
+          setScoreState(prev => ({
+            ...prev,
+            totalScore: currentScore
+          }));
+          console.log('빙고 보드 초기화 후 점수 복원:', currentScore);
+        }, 500);
       }
-      setTasks(currentTasks);
+    } catch (error) {
+      console.error('빙고 보드 동기화 오류:', error);
     }
-
-    // 사이즈가 변경되면 기본 태스크 로드
-    if (sizeKey !== lastSizeKey) {
-      // 해당 사이즈의 기본 태스크 로드
-      const defaultTasks = await loadTasks(bingoSize);
-      setTasks(defaultTasks);
-      currentTasks = defaultTasks;
-    
-      // 현재 사이즈 키 저장
-      await AsyncStorage.setItem('lastBingoSizeKey', sizeKey);
-    
-      // 마지막 랜덤화 날짜 초기화하여 새로운 랜덤 배치 적용
-      //await AsyncStorage.removeItem('lastRandomizeDate');
-    }
-
-    // 랜덤화 필요 여부 체크 (하루가 지났거나, 저장된 배열이 없는 경우)
-    const needsRandomize = !lastRandomizeDate || lastRandomizeDate !== currentDateStr;
-    
-    if (needsRandomize) {
-      // 하루가 지나서 랜덤화 필요
-      const existingTasks = currentTasks.slice(0, totalCells - 1); // '칭찬하기' 제외
-
-      // 태스크가 비어있는지 다시 확인
-      if (existingTasks.length === 0 || existingTasks.every(task => !task.title)) {
-        // 기본 태스크 로드
-        const defaultTasks = await loadTasks(bingoSize);
-        currentTasks = defaultTasks;
-        console.log('랜덤화를 위한 기본 태스크 로드:', defaultTasks);
-      }
-
-      const randomizedTasks = randomizeTasks(existingTasks);
-      
-      // 랜덤화된 태스크 저장
-      setTasks(randomizedTasks);
-      currentTasks = randomizedTasks;
-      
-      // 각 사이즈별로 랜덤화된 태스크 저장
-      await AsyncStorage.setItem(`tasks_${bingoSize}x${bingoSize}`, JSON.stringify(randomizedTasks));
-      
-      // 마지막 랜덤화 날짜 저장
-      await AsyncStorage.setItem('lastRandomizeDate', currentDateStr);
-    } 
-    
-    
-    // 현재 사이즈에 해당하는 완료 상태 불러오기
-    const completedTasksJson = await AsyncStorage.getItem(`completedTasks_${bingoSize}`);
-    const completedTasks = completedTasksJson ? JSON.parse(completedTasksJson) : {};
-
-    // 현재 사이즈의 마지막 빙고 카운트 불러오기
-    const lastBingoCountStr = await AsyncStorage.getItem(`lastBingoCount_${bingoSize}`);
-    const savedBingoCount = lastBingoCountStr ? parseInt(lastBingoCountStr) : 0;
-    setLastBingoCount(savedBingoCount);
-    
-    // 빙고 보드 생성
-    const filledBoard = Array.from({ length: totalCells }, (_, i) => {
-      if (i === centerIndex) {
-        // 칭찬하기 셀은 항상 중앙에 고정
-        return { 
-          id: 9999, 
-          title: t('bingo.praise'), 
-          completed: completedTasks[9999] || false 
-        };
-      }
-
-      // 중앙 셀을 제외한 인덱스 계산
-      let taskIndex = i;
-      if (i > centerIndex) taskIndex = i - 1;
-
-      // 해당 인덱스의 할 일 가져오기 (없으면 빈 셀)
-      const task = currentTasks[taskIndex] || { id: -(i + 1), title: '', completed: false };
-      
-      // ID 기준으로 완료 상태 복원
-      return { 
-        ...task, 
-        completed: completedTasks[task.id] || false 
-      };
-    });
-
-    setBingoBoard(filledBoard);
   };
 
-
+  const syncScore = async () => {
+    await syncUserScoreFromFirebase(setScoreState);
+  };
 
   const checkBingo = async () => {
-    // 2차원 그리드로 변환
-    const grid = Array(bingoSize).fill(null).map(() => Array(bingoSize).fill(false));
-    
+    // 2차원 그리드 생성
+    const grid = Array(bingoSize)
+      .fill(null)
+      .map(() => Array(bingoSize).fill(false));
     bingoBoard.forEach((cell, index) => {
       const row = Math.floor(index / bingoSize);
       const col = index % bingoSize;
       grid[row][col] = cell.completed;
     });
-
-    // 빙고 체크 함수들
-    const checkRow = (row: number) => grid[row].every((cell) => cell);
-    const checkCol = (col: number) => grid.every((row) => row[col]);
+  
+    const checkRow = (row: number) => grid[row].every(cell => cell);
+    const checkCol = (col: number) => grid.every(row => row[col]);
     const checkDiagonal1 = () => grid.every((_, i) => grid[i][i]);
     const checkDiagonal2 = () => grid.every((_, i) => grid[i][bingoSize - 1 - i]);
-
+  
     let bingoCount = 0;
-    // 가로 체크
     for (let i = 0; i < bingoSize; i++) {
       if (checkRow(i)) bingoCount++;
-    }
-
-    // 세로 체크
-    for (let i = 0; i < bingoSize; i++) {
       if (checkCol(i)) bingoCount++;
     }
-
-    // 대각선 체크
-    if (checkDiagonal1()) bingoCount++;  
+    if (checkDiagonal1()) bingoCount++;
     if (checkDiagonal2()) bingoCount++;
-
-    // 이전 빙고 수와 현재 빙고 수 비교
+  
+    // 이전 빙고 수와 비교하여 증가분만 점수에 반영
     const bingoDifference = bingoCount - lastBingoCount;
-    
-    // 점수 업데이트 - 빙고 수 변화에 따라 점수 조정
-    if (bingoDifference !== 0) {
+    if (bingoDifference > 0) { // 중요: 빙고가 증가한 경우에만 점수 업데이트
       const currentUser = auth.currentUser;
       if (currentUser) {
         try {
+          // 현재 점수에 빙고 증가분만큼 점수 추가
+          const scoreChange = bingoDifference * 100;
+          const newTotalScore = scoreState.totalScore + scoreChange;
+            
+          setScoreState(prev => ({
+            ...prev,
+            totalScore: newTotalScore,
+          }));
+    
+          // 캐시된 누적 점수 업데이트
+          await AsyncStorage.setItem('cachedTotalScore', newTotalScore.toString());
+          console.log('빙고 증가로 점수 업데이트:', {
+            이전점수: scoreState.totalScore,
+            증가: scoreChange,
+            새점수: newTotalScore
+          });
+    
+          // Firebase 업데이트는
           const userDocRef = doc(db, 'users', currentUser.uid);
-          const docSnapshot = await getDoc(userDocRef);
-
-          if (docSnapshot.exists) {
-            const userData = docSnapshot.data();
-            //const currentTotalScore = userData?.totalScore || 0;
-            const currentTotalScore = scoreState.totalScore || 0;
-            const scoreChange = bingoDifference * 100;
-            const newTotalScore = Math.max(0, currentTotalScore + scoreChange);
-              
-            // 로컬 상태 업데이트
-            setScoreState(prev => ({
-              ...prev,
-              totalScore: newTotalScore,
-              //bingoCount: bingoCount
-            }));
-
-            // Firebase 업데이트
-            await updateDoc(userDocRef, {
-              totalScore: newTotalScore,
-              //bingoCount: bingoCount,
-              updatedAt: serverTimestamp()
-            });
-
-            // 빙고가 새로 완성되었을 때 출석 체크 증가
-            if (bingoCount > lastBingoCount) {
-              await checkAttendance();
-            }
-          }
+          
+          // 빙고 완성 시 출석 체크 실행
+          const attendanceResult = await checkAttendance(newTotalScore, scoreState.streak);
+          setScoreState(prev => ({
+            ...prev,
+            totalScore: attendanceResult.newTotalScore,
+            streak: attendanceResult.newStreak,
+            lastAttendanceDate: attendanceResult.lastAttendanceDate
+          }));
+          
+          // Firebase 업데이트
+          await updateDoc(userDocRef, {
+            totalScore: attendanceResult.newTotalScore,
+            streak: attendanceResult.newStreak,
+            lastAttendanceDate: attendanceResult.lastAttendanceDate,
+            updatedAt: serverTimestamp()
+          });
+          
+          await AsyncStorage.setItem('cachedTotalScore', attendanceResult.newTotalScore.toString());
         } catch (error) {
           console.error('점수 업데이트 오류:', error);
         }
       }
     }
-     // 현재 빙고 수 저장
-     setLastBingoCount(bingoCount);
+    
+    setLastBingoCount(bingoCount);
     await AsyncStorage.setItem(`lastBingoCount_${bingoSize}`, bingoCount.toString());
-  }
-
-// 출석 체크 로직 (streak 증가)
-const checkAttendance = async () => {
-  const currentUser = auth.currentUser;
-  if (!currentUser) return;
-
-  const today = getCurrentLocalDate(); // 
-  try {
-    // 로컬 캐시에서 마지막 출석 날짜와 streak 읽기
-    const cachedLastAttendanceDate = await AsyncStorage.getItem('localLastAttendanceDate');
-    const cachedStreakStr = await AsyncStorage.getItem('localStreak');
-    let localStreak = cachedStreakStr ? parseInt(cachedStreakStr) : 0;
-
-    // 이미 오늘 출석한 경우 처리
-    if (cachedLastAttendanceDate === today) {
-      console.log('이미 오늘 출석했습니다 (로컬 캐시 기준).');
-      return;
-    }
-
-    // 어제 날짜를 로컬 기준 문자열로 계산
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = getLocalDateString(yesterday);
-
-    // 어제 출석했으면 streak 증가, 아니면 1로 재설정
-    if (cachedLastAttendanceDate === yesterdayStr) {
-      localStreak += 1;
-    } else {
-      localStreak = 1;
-    }
-
-    // 현재 총 점수 가져오기 (로컬 상태 우선)
-    let currentTotalScore = scoreState.totalScore;
-    if (currentTotalScore === undefined || currentTotalScore === null) {
-      const userDocRef = doc(getFirestore(), 'users', currentUser.uid);
-      const docSnapshot = await getDoc(userDocRef);
-      currentTotalScore = docSnapshot.exists ? (docSnapshot.data()?.totalScore || 0) : 0;
-    }
-    // 출석 보너스 계산 (streak에 따라 보너스 점수 증가)
-    let attendanceBonus = 0;
-    if (localStreak === 1) attendanceBonus = 50;
-    else if (localStreak === 2) attendanceBonus = 60;
-    else if (localStreak === 3) attendanceBonus = 70;
-    else if (localStreak === 4) attendanceBonus = 80;
-    else if (localStreak === 5) attendanceBonus = 90;
-    else if (localStreak >= 6) attendanceBonus = 100;
-
-    const newTotalScore = currentTotalScore + attendanceBonus;
-
-    // 로컬 상태 업데이트
-    setScoreState(prev => ({
-      ...prev,
-      totalScore: newTotalScore,
-      streak: localStreak,
-      lastAttendanceDate: today,
-    }));
-
-    // Firestore 업데이트
-    const userDocRef = doc(db, 'users', currentUser.uid);
-    await updateDoc(userDocRef, {
-      totalScore: newTotalScore,
-      streak: localStreak,
-      lastAttendanceDate: today,
-      updatedAt: serverTimestamp(),
-    });
-
-    // 로컬 AsyncStorage에 최신 출석 정보 캐싱
-    await AsyncStorage.setItem('localLastAttendanceDate', today);
-    await AsyncStorage.setItem('localStreak', localStreak.toString());
-
-    console.log('출석 체크 (로컬 캐시 사용):', {
-      streak: localStreak,
-      attendanceBonus: attendanceBonus,
-      newTotalScore: newTotalScore,
-      lastAttendanceDate: today
-    });
-
-  } catch (error) {
-    console.error('출석 체크 오류:', error);
-  }
-};
-
+  };
   
 
   const toggleTaskCompletion = async (taskId: number) => {
@@ -491,24 +227,57 @@ const checkAttendance = async () => {
 
   const handleAppStateChange = async (nextAppState: string) => {
     if (nextAppState === 'active') {
-      await dailyReset();
+      // 앱이 활성화될 때 먼저 로컬 캐시 확인
+      const cachedTotalScoreStr = await AsyncStorage.getItem('cachedTotalScore');
+      const cachedTotalScore = cachedTotalScoreStr ? parseInt(cachedTotalScoreStr) : 0;
+      
+      if (cachedTotalScore > 0) {
+        setScoreState(prev => ({
+          ...prev,
+          totalScore: cachedTotalScore
+        }));
+        console.log('앱 활성화 시 캐시에서 점수 복원:', cachedTotalScore);
+      }
+      
+      // 날짜 확인 및 리셋 처리
+      const today = getCurrentLocalDate();
+      const lastResetDay = await AsyncStorage.getItem('lastResetDay');
+      if(!lastResetDay || lastResetDay !== today){
+        await dailyReset();
+        await syncBoard();
+        
+        // 중요: 리셋 후 Firebase 동기화는 한 번만 수행
+        await syncScore();
+      }
     } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        try {
-          // 로컬 캐시에서 데이터 읽기
-          const cachedLastAttendanceDate = await AsyncStorage.getItem('localLastAttendanceDate');
-          const cachedStreakStr = await AsyncStorage.getItem('localStreak');
-
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          await updateDoc(userDocRef, {
-            totalScore: scoreState.totalScore,
-            streak: cachedStreakStr ? parseInt(cachedStreakStr) : scoreState.streak,
-            lastAttendanceDate: cachedLastAttendanceDate || scoreState.lastAttendanceDate,
-            updatedAt: serverTimestamp()
-          });
-        } catch (error) {
-          console.error('앱 상태 변경 시 데이터 저장 오류:', error);
+      // 앱이 백그라운드로 갈 때는 로컬 캐시만 업데이트하고 Firebase는 필요할 때만 업데이트
+      if (scoreState.totalScore > 0) {
+        await AsyncStorage.setItem('cachedTotalScore', scoreState.totalScore.toString());
+        console.log('백그라운드로 전환 시 점수 캐싱:', scoreState.totalScore);
+        
+        // 마지막 Firebase 업데이트 시간 확인
+        const lastUpdateStr = await AsyncStorage.getItem('lastFirebaseUpdate');
+        const now = Date.now();
+        const lastUpdate = lastUpdateStr ? parseInt(lastUpdateStr) : 0;
+        
+        // 마지막 업데이트로부터 5분 이상 지났거나 처음 업데이트하는 경우에만 Firebase 업데이트
+        if (!lastUpdateStr || (now - lastUpdate > 5 * 60 * 1000)) {
+          const currentUser = auth.currentUser;
+          if (currentUser) {
+            try {
+              const userDocRef = doc(db, 'users', currentUser.uid);
+              await updateDoc(userDocRef, {
+                totalScore: scoreState.totalScore,
+                streak: scoreState.streak,
+                lastAttendanceDate: scoreState.lastAttendanceDate,
+                updatedAt: serverTimestamp()
+              });
+              await AsyncStorage.setItem('lastFirebaseUpdate', now.toString());
+              console.log('Firebase 점수 업데이트 5분:', scoreState.totalScore);
+            } catch (error) {
+              console.error('Firebase 업데이트 오류:', error);
+            }
+          }
         }
       }
     }
@@ -544,148 +313,76 @@ const checkAttendance = async () => {
     }
   };
 
-  // 일일 리셋 및 점수 업데이트 함수 수정
-  const dailyReset = async () => {
-    const today = getCurrentLocalDate();
-    // 마지막 리셋 날짜 가져오기
-    const lastResetDay = await AsyncStorage.getItem('lastResetDay');
-    
-    console.log('날짜 확인:', { 현재날짜: today, 마지막리셋날짜: lastResetDay });
-    
-    // 하루가 지났는지 확인 (lastResetDay가 없거나 today와 다른 경우)
-    if (!lastResetDay || lastResetDay !== today) {
-      console.log('날짜가 변경되어 빙고보드를 리셋합니다:', lastResetDay, '->', today);
-      
-      // 완료 상태 리셋
-      await AsyncStorage.setItem('completedTasks_3', JSON.stringify({}));
-      await AsyncStorage.setItem('completedTasks_5', JSON.stringify({}));
-      
-      // 빙고 카운트 리셋
-      await AsyncStorage.setItem('lastBingoCount_3', '0');
-      await AsyncStorage.setItem('lastBingoCount_5', '0');
-
-      // 마지막 리셋 날짜 업데이트
-      await AsyncStorage.setItem('lastResetDay', today);
-      
-      // 보드판 상태 리셋 및 새로운 랜덤 배치 적용
-      await AsyncStorage.removeItem('lastRandomizeDate');
-      
-      // 보드 다시 생성
-      await syncTasksWithBoard();
-      
-      // 점수 상태 업데이트 - 빙고 카운트만 리셋
-      setScoreState(prev => ({
-        ...prev,
-        bingoCount: 0
-      }));
-    }
-  };
-
-
-  // Firebase에서 사용자 점수 동기화
-  const syncUserScoreFromFirebase = async () => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) return;
-    
-    try {
-      // 먼저 로컬 캐시에서 데이터 읽기
-      const cachedLastAttendanceDate = await AsyncStorage.getItem('localLastAttendanceDate');
-      const cachedStreakStr = await AsyncStorage.getItem('localStreak');
-      const localStreak = cachedStreakStr ? parseInt(cachedStreakStr) : 0;
-      
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      const docSnapshot = await getDoc(userDocRef);
-      
-      if (docSnapshot.exists) {
-        const userData = docSnapshot.data();
-
-        const firebaseStreak = userData?.streak || 0;
-        const finalStreak = Math.max(localStreak, firebaseStreak);
-
-        // 로컬 상태 업데이트
-        setScoreState(prev => ({
-          ...prev,
-          totalScore: userData?.totalScore || 0,
-          streak: finalStreak,
-          lastAttendanceDate: userData?.lastAttendanceDate || null
-        }));
-
-        // 로컬 AsyncStorage에 최신 출석 정보 캐싱
-        await AsyncStorage.setItem('localStreak', finalStreak.toString());
-        if(cachedLastAttendanceDate){
-          await AsyncStorage.setItem('localLastAttendanceDate', cachedLastAttendanceDate);
-        }
-        
-        console.log('Firebase에서 점수 동기화 완료:', {
-          totalScore: userData?.totalScore,
-          streak: finalStreak,
-          lastAttendanceDate: userData?.lastAttendanceDate
-        });
-      }
-    } catch (error) {
-      console.error('점수 동기화 오류:', error);
-    }
-  };
-
-  // 앱 시작 시 출석 정보를 로컬 캐시에서 읽어오고, 오늘 출석이 아니라면 checkAttendance 호출
-  const initializeAttendance = async () => {
-    const today = getCurrentLocalDate();
-    const cachedLastAttendanceDate = await AsyncStorage.getItem('localLastAttendanceDate');
-    const cachedStreakStr = await AsyncStorage.getItem('localStreak');
-
-    if (cachedLastAttendanceDate && cachedStreakStr) {
-      const localStreak = parseInt(cachedStreakStr);
-
-      // 로컬 캐시 값을 상태에 반영
-      setScoreState(prev => ({
-          ...prev,
-          streak: localStreak,
-          lastAttendanceDate: cachedLastAttendanceDate,
-      }));
-
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        const userDocRef = doc(db, 'users', currentUser.uid);
-        await updateDoc(userDocRef, {
-          streak: localStreak,
-          lastAttendanceDate: cachedLastAttendanceDate,
-          updatedAt: serverTimestamp()
-        });
-      }
-    }
-
-    // 오늘 출석하지 않았다면 출석 체크 실행
-    if (cachedLastAttendanceDate !== today) {
-      await checkAttendance();
-    }
-  };
-
-  // 컴포넌트 내부에 AppState 리스너 추가
+  // AppState 리스너 설정: 앱 활성화 시 출석 및 리셋 처리
   useEffect(() => {
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     // 컴포넌트 마운트 시 초기 실행
-    
-    initializeAttendance();
-    syncUserScoreFromFirebase();
-    dailyReset();
-    checkAttendance();
-  
-    return () => {
-      subscription.remove();
+    const initialize = async () => {
+      // 먼저 로컬 캐시에서 점수 확인
+      const cachedTotalScoreStr = await AsyncStorage.getItem('cachedTotalScore');
+      if (cachedTotalScoreStr) {
+        const cachedTotalScore = parseInt(cachedTotalScoreStr);
+        if (cachedTotalScore > 0) {
+          setScoreState(prev => ({
+            ...prev,
+            totalScore: cachedTotalScore
+          }));
+          console.log('로컬 캐시에서 점수 복원:', cachedTotalScore);
+        }
+      }
+      
+      // Firebase에서 점수 동기화
+      await syncScore();
+      
+      // 로컬 캐시에 저장된 출석 정보 적용
+      await initializeAttendance();
+      
+      // 날짜 확인 및 리셋 처리
+      const today = getCurrentLocalDate();
+      const lastResetDay = await AsyncStorage.getItem('lastResetDay');
+      if(!lastResetDay || lastResetDay !== today){
+        await dailyReset();
+        await syncBoard();
+        // 리셋 후 다시 점수 동기화
+        await syncScore();
+      } else {
+        await syncBoard();
+      }
     };
+    initialize();
+
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
-    // 보드 크기가 바뀔 때 lastBingoCount를 초기화
-    AsyncStorage.setItem('lastBingoCount', '0');
-    setLastBingoCount(0);
-    syncTasksWithBoard();
+    syncBoard();
   }, [tasks, bingoSize]);
+
+  useEffect(() => {
+    //AsyncStorage.setItem('lastBingoCount', '0');
+    setLastBingoCount(0);
+    syncBoard();
+  }, [bingoSize]);
 
   // 빙고 체크 
   useEffect(() => {
     checkBingo();
   }, [bingoBoard]);
+
+  useEffect(() => {
+    // 점수 변경 감지
+    console.log('점수 상태 변경:', scoreState.totalScore);
+    
+    // 점수가 변경될 때마다 로컬 캐시 업데이트 (0이 아닌 경우에만)
+    const updateCache = async () => {
+      if (scoreState.totalScore > 0) {
+        await AsyncStorage.setItem('cachedTotalScore', scoreState.totalScore.toString());
+        console.log('점수 캐시 업데이트:', scoreState.totalScore);
+      }
+    };
+    
+    updateCache();
+  }, [scoreState.totalScore]);
 
   return (
     <View style={styles.container}>

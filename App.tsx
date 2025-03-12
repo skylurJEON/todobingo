@@ -29,22 +29,12 @@ const clearAllData = async () => {
 
 //clearAllData();
 
-function AppDataLoader({ children }: { children: React.ReactNode }) {
-  const [tasks, setTasks] = useRecoilState(tasksAtom);
-  const bingoSize = useRecoilValue(bingoSizeAtom);
-  const [scoreState, setScoreState] = useRecoilState(scoreAtom);
-
-  return children;
-}
-
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar hidden={true} />
       <RecoilRoot>
-        <AppDataLoader>
           <AppNavigation />
-        </AppDataLoader>
       </RecoilRoot>
     </GestureHandlerRootView>
   );
