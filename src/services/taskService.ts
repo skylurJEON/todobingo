@@ -36,6 +36,7 @@ export const saveTasks = async (size: number, tasks: Task[]) => {
 };
 
 export const getDefaultTasks = (size: number): Task[] => {
+  
   // i18n에서 현재 언어에 맞는 기본 할 일 목록 가져오기
   const getTaskList = (taskKey: string) => {
     const tasks = i18n.t(`default_tasks.${taskKey}`, { returnObjects: true }) as string[];

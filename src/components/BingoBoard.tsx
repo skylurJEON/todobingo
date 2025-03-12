@@ -221,8 +221,6 @@ export default function BingoBoard() {
       //await AsyncStorage.removeItem('lastRandomizeDate');
     }
 
-
-
     // 랜덤화 필요 여부 체크 (하루가 지났거나, 저장된 배열이 없는 경우)
     const needsRandomize = !lastRandomizeDate || lastRandomizeDate !== currentDateStr;
     
@@ -620,11 +618,31 @@ const checkAttendance = async () => {
     }
   };
 
+  // 앱 시작 시 출석 정보를 로컬 캐시에서 읽어오고, 오늘 출석이 아니라면 checkAttendance 호출
+  const initializeAttendance = async () => {
+    const today = getCurrentLocalDate();
+    const cachedLastAttendanceDate = await AsyncStorage.getItem('localLastAttendanceDate');
+    const cachedStreakStr = await AsyncStorage.getItem('localStreak');
+    if (cachedLastAttendanceDate && cachedStreakStr) {
+      // 로컬 캐시 값을 상태에 반영합니다.
+      setScoreState(prev => ({
+          ...prev,
+          streak: parseInt(cachedStreakStr),
+          lastAttendanceDate: cachedLastAttendanceDate,
+      }));
+    }
+    // 오늘 출석하지 않았다면 출석 체크 실행
+    if (cachedLastAttendanceDate !== today) {
+      await checkAttendance();
+    }
+  };
+
   // 컴포넌트 내부에 AppState 리스너 추가
   useEffect(() => {
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     // 컴포넌트 마운트 시 초기 실행
     dailyReset();
+    initializeAttendance();
     syncUserScoreFromFirebase();
     
     return () => {
