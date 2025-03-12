@@ -372,7 +372,7 @@ const checkAttendance = async () => {
   const currentUser = auth.currentUser;
   if (!currentUser) return;
 
-  const today = getCurrentLocalDate(); // 예: "2025-03-14"
+  const today = getCurrentLocalDate(); // 
   try {
     // 로컬 캐시에서 마지막 출석 날짜와 streak 읽기
     const cachedLastAttendanceDate = await AsyncStorage.getItem('localLastAttendanceDate');
@@ -397,11 +397,13 @@ const checkAttendance = async () => {
       localStreak = 1;
     }
 
-    // Firestore에서 현재 총 점수를 가져옵니다.
-    const userDocRef = doc(getFirestore(), 'users', currentUser.uid);
-    const docSnapshot = await getDoc(userDocRef);
-    const currentTotalScore = docSnapshot.exists ? (docSnapshot.data()?.totalScore || 0) : 0;
-
+    // 현재 총 점수 가져오기 (로컬 상태 우선)
+    let currentTotalScore = scoreState.totalScore;
+    if (currentTotalScore === undefined || currentTotalScore === null) {
+      const userDocRef = doc(getFirestore(), 'users', currentUser.uid);
+      const docSnapshot = await getDoc(userDocRef);
+      currentTotalScore = docSnapshot.exists ? (docSnapshot.data()?.totalScore || 0) : 0;
+    }
     // 출석 보너스 계산 (streak에 따라 보너스 점수 증가)
     let attendanceBonus = 0;
     if (localStreak === 1) attendanceBonus = 50;
@@ -422,6 +424,7 @@ const checkAttendance = async () => {
     }));
 
     // Firestore 업데이트
+    const userDocRef = doc(db, 'users', currentUser.uid);
     await updateDoc(userDocRef, {
       totalScore: newTotalScore,
       streak: localStreak,
@@ -661,10 +664,12 @@ const checkAttendance = async () => {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     // 컴포넌트 마운트 시 초기 실행
-    dailyReset();
+    
     initializeAttendance();
     syncUserScoreFromFirebase();
-    
+    dailyReset();
+    checkAttendance();
+  
     return () => {
       subscription.remove();
     };
