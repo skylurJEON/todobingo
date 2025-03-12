@@ -493,25 +493,17 @@ const checkAttendance = async () => {
       const currentUser = auth.currentUser;
       if (currentUser) {
         try {
+          // 로컬 캐시에서 데이터 읽기
+          const cachedLastAttendanceDate = await AsyncStorage.getItem('localLastAttendanceDate');
+          const cachedStreakStr = await AsyncStorage.getItem('localStreak');
+
           const userDocRef = doc(db, 'users', currentUser.uid);
-          const docSnapshot = await getDoc(userDocRef);
-          
-          if (docSnapshot.exists) {
-            const userData = docSnapshot.data();
-            // 현재 상태와 비교하여 실제로 변경된 경우에만 업데이트
-            if (
-              userData?.totalScore !== scoreState.totalScore ||
-              userData?.streak !== scoreState.streak ||
-              userData?.lastAttendanceDate !== scoreState.lastAttendanceDate
-            ) {
-              await updateDoc(userDocRef, {
-                totalScore: scoreState.totalScore,
-                streak: scoreState.streak,
-                lastAttendanceDate: scoreState.lastAttendanceDate,
-                updatedAt: serverTimestamp()
-              });
-            }
-          }
+          await updateDoc(userDocRef, {
+            totalScore: scoreState.totalScore,
+            streak: cachedStreakStr ? parseInt(cachedStreakStr) : scoreState.streak,
+            lastAttendanceDate: cachedLastAttendanceDate || scoreState.lastAttendanceDate,
+            updatedAt: serverTimestamp()
+          });
         } catch (error) {
           console.error('앱 상태 변경 시 데이터 저장 오류:', error);
         }
@@ -593,23 +585,37 @@ const checkAttendance = async () => {
     if (!currentUser) return;
     
     try {
+      // 먼저 로컬 캐시에서 데이터 읽기
+      const cachedLastAttendanceDate = await AsyncStorage.getItem('localLastAttendanceDate');
+      const cachedStreakStr = await AsyncStorage.getItem('localStreak');
+      const localStreak = cachedStreakStr ? parseInt(cachedStreakStr) : 0;
+      
       const userDocRef = doc(db, 'users', currentUser.uid);
       const docSnapshot = await getDoc(userDocRef);
       
       if (docSnapshot.exists) {
         const userData = docSnapshot.data();
-        
+
+        const firebaseStreak = userData?.streak || 0;
+        const finalStreak = Math.max(localStreak, firebaseStreak);
+
         // 로컬 상태 업데이트
         setScoreState(prev => ({
           ...prev,
           totalScore: userData?.totalScore || 0,
-          streak: userData?.streak || 0,
+          streak: finalStreak,
           lastAttendanceDate: userData?.lastAttendanceDate || null
         }));
+
+        // 로컬 AsyncStorage에 최신 출석 정보 캐싱
+        await AsyncStorage.setItem('localStreak', finalStreak.toString());
+        if(cachedLastAttendanceDate){
+          await AsyncStorage.setItem('localLastAttendanceDate', cachedLastAttendanceDate);
+        }
         
         console.log('Firebase에서 점수 동기화 완료:', {
           totalScore: userData?.totalScore,
-          streak: userData?.streak,
+          streak: finalStreak,
           lastAttendanceDate: userData?.lastAttendanceDate
         });
       }
@@ -623,14 +629,28 @@ const checkAttendance = async () => {
     const today = getCurrentLocalDate();
     const cachedLastAttendanceDate = await AsyncStorage.getItem('localLastAttendanceDate');
     const cachedStreakStr = await AsyncStorage.getItem('localStreak');
+
     if (cachedLastAttendanceDate && cachedStreakStr) {
-      // 로컬 캐시 값을 상태에 반영합니다.
+      const localStreak = parseInt(cachedStreakStr);
+
+      // 로컬 캐시 값을 상태에 반영
       setScoreState(prev => ({
           ...prev,
-          streak: parseInt(cachedStreakStr),
+          streak: localStreak,
           lastAttendanceDate: cachedLastAttendanceDate,
       }));
+
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        await updateDoc(userDocRef, {
+          streak: localStreak,
+          lastAttendanceDate: cachedLastAttendanceDate,
+          updatedAt: serverTimestamp()
+        });
+      }
     }
+
     // 오늘 출석하지 않았다면 출석 체크 실행
     if (cachedLastAttendanceDate !== today) {
       await checkAttendance();
@@ -651,7 +671,7 @@ const checkAttendance = async () => {
   }, []);
 
   useEffect(() => {
-    // 보드 크기가 바뀔 때 lastBingoCount를 초기화합니다.
+    // 보드 크기가 바뀔 때 lastBingoCount를 초기화
     AsyncStorage.setItem('lastBingoCount', '0');
     setLastBingoCount(0);
     syncTasksWithBoard();
@@ -875,7 +895,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   devModeButtonActive: {
-    backgroundColor: 'rgba(255, 0, 0, 0.5)', // Dev 모드일 때 색 강조
+    backgroundColor: 'rgba(255, 0, 0, 0.5)',
   },
   devModeButtonText: {
     color: '#fff',
