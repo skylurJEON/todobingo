@@ -61,7 +61,7 @@ export const initializeAttendance = async (): Promise<{ shouldCheck: boolean }> 
   return { shouldCheck: cachedLastAttendanceDate !== today };
 };
 
-export const dailyReset = async (boardSizes: number[] = [3, 5]) => {
+export const dailyReset = async (boardSizes: number[] = [3, 5], setScoreState:any) => {
   const today = getCurrentLocalDate();
   const lastResetDay = await AsyncStorage.getItem('lastResetDay');
   console.log('lastResetDay', lastResetDay);
@@ -83,6 +83,7 @@ export const dailyReset = async (boardSizes: number[] = [3, 5]) => {
     // 중요: 점수는 항상 로컬 캐시에 보존
     if (cachedTotalScore > 0) {
       await AsyncStorage.setItem('cachedTotalScore', cachedTotalScore.toString());
+      setScoreState((prev:any) => ({ ...prev, totalScore: cachedTotalScore }));
       console.log('일일 리셋 후 점수 보존:', cachedTotalScore);
     }
 

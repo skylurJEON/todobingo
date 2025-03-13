@@ -51,6 +51,7 @@ export default function BingoBoard() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [lastBingoCount, setLastBingoCount] = useState(0); // 마지막으로 확인한 빙고 수
   const [scoreState, setScoreState] = useRecoilState(scoreAtom); // 점수 상태
+  const latestScoreRef = useRef(scoreState.totalScore);
 
   // Firebase 인스턴스 가져오기
   const auth = getAuth();
@@ -133,7 +134,7 @@ export default function BingoBoard() {
   
     // 이전 빙고 수와 비교하여 증가분만 점수에 반영
     const bingoDifference = bingoCount - lastBingoCount;
-    if (bingoDifference > 0) { // 중요: 빙고가 증가한 경우에만 점수 업데이트
+    if (bingoDifference !== 0) { //취소 포함
       const currentUser = auth.currentUser;
       if (currentUser) {
         try {
@@ -228,60 +229,37 @@ export default function BingoBoard() {
   const handleAppStateChange = async (nextAppState: string) => {
     if (nextAppState === 'active') {
       // 앱이 활성화될 때 먼저 로컬 캐시 확인
-      const cachedTotalScoreStr = await AsyncStorage.getItem('cachedTotalScore');
-      const cachedTotalScore = cachedTotalScoreStr ? parseInt(cachedTotalScoreStr) : 0;
-      
-      if (cachedTotalScore > 0) {
-        setScoreState(prev => ({
-          ...prev,
-          totalScore: cachedTotalScore
-        }));
-        console.log('앱 활성화 시 캐시에서 점수 복원:', cachedTotalScore);
+      const cachedScore = await AsyncStorage.getItem("cachedTotalScore");
+      if (cachedScore) {
+        const cachedScoreNum = parseInt(cachedScore, 10);
+        if (cachedScoreNum > scoreState.totalScore) {
+          setScoreState(prev => ({ ...prev, totalScore: cachedScoreNum }));
+          console.log("앱 활성화 시 최신 점수 반영:", cachedScoreNum);
+        }
       }
       
       // 날짜 확인 및 리셋 처리
       const today = getCurrentLocalDate();
       const lastResetDay = await AsyncStorage.getItem('lastResetDay');
       if(!lastResetDay || lastResetDay !== today){
-        await dailyReset();
+        await dailyReset([3, 5], setScoreState);
         await syncBoard();
         
         // 중요: 리셋 후 Firebase 동기화는 한 번만 수행
         await syncScore();
       }
     } else if (nextAppState === 'background' || nextAppState === 'inactive') {
-      // 앱이 백그라운드로 갈 때는 로컬 캐시만 업데이트하고 Firebase는 필요할 때만 업데이트
-      if (scoreState.totalScore > 0) {
-        await AsyncStorage.setItem('cachedTotalScore', scoreState.totalScore.toString());
-        console.log('백그라운드로 전환 시 점수 캐싱:', scoreState.totalScore);
-        
-        // 마지막 Firebase 업데이트 시간 확인
-        const lastUpdateStr = await AsyncStorage.getItem('lastFirebaseUpdate');
-        const now = Date.now();
-        const lastUpdate = lastUpdateStr ? parseInt(lastUpdateStr) : 0;
-        
-        // 마지막 업데이트로부터 5분 이상 지났거나 처음 업데이트하는 경우에만 Firebase 업데이트
-        if (!lastUpdateStr || (now - lastUpdate > 5 * 60 * 1000)) {
-          const currentUser = auth.currentUser;
-          if (currentUser) {
-            try {
-              const userDocRef = doc(db, 'users', currentUser.uid);
-              await updateDoc(userDocRef, {
-                totalScore: scoreState.totalScore,
-                streak: scoreState.streak,
-                lastAttendanceDate: scoreState.lastAttendanceDate,
-                updatedAt: serverTimestamp()
-              });
-              await AsyncStorage.setItem('lastFirebaseUpdate', now.toString());
-              console.log('Firebase 점수 업데이트 5분:', scoreState.totalScore);
-            } catch (error) {
-              console.error('Firebase 업데이트 오류:', error);
-            }
-          }
-        }
-      }
+        setTimeout(async () => {
+          console.log("백그라운드 전환 시 저장 전 최신 점수:", latestScoreRef.current);
+          await AsyncStorage.setItem("cachedTotalScore", latestScoreRef.current.toString());
+          console.log("백그라운드로 전환 시 최신 점수 캐싱:", latestScoreRef.current);
+        }, 500); // 500ms 지연
     }
   };
+
+  useEffect(() => {
+    latestScoreRef.current = scoreState.totalScore; // 점수 변경될 때 최신 값 저장
+  }, [scoreState.totalScore]);
 
   const handleTimerComplete = () => {
     if (selectedTask) {
@@ -341,7 +319,7 @@ export default function BingoBoard() {
       const today = getCurrentLocalDate();
       const lastResetDay = await AsyncStorage.getItem('lastResetDay');
       if(!lastResetDay || lastResetDay !== today){
-        await dailyReset();
+        await dailyReset([3, 5], setScoreState);
         await syncBoard();
         // 리셋 후 다시 점수 동기화
         await syncScore();
@@ -368,6 +346,20 @@ export default function BingoBoard() {
   useEffect(() => {
     checkBingo();
   }, [bingoBoard]);
+
+  useEffect(() => {
+    const restoreScore = async () => {
+        const cachedScore = await AsyncStorage.getItem("cachedTotalScore");
+        if (cachedScore) {
+            const cachedScoreNum = parseInt(cachedScore, 10);
+            if (cachedScoreNum > scoreState.totalScore) {
+                setScoreState(prev => ({ ...prev, totalScore: cachedScoreNum }));
+                console.log("앱 시작 시 점수 복원:", cachedScoreNum);
+            }
+        }
+    };
+    restoreScore();
+  }, []);
 
   useEffect(() => {
     // 점수 변경 감지
