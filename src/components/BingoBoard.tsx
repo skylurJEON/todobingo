@@ -123,8 +123,12 @@ export default function BingoBoard() {
     const checkCol = (col: number) => grid.every(row => row[col]);
     const checkDiagonal1 = () => grid.every((_, i) => grid[i][i]);
     const checkDiagonal2 = () => grid.every((_, i) => grid[i][bingoSize - 1 - i]);
+
+    const lastBingoCountStr = await AsyncStorage.getItem(`lastBingoCount_${bingoSize}`);
+    const savedLastBingoCount = lastBingoCountStr ? parseInt(lastBingoCountStr) : 0;
   
     let bingoCount = 0;
+
     for (let i = 0; i < bingoSize; i++) {
       if (checkRow(i)) bingoCount++;
       if (checkCol(i)) bingoCount++;
@@ -133,7 +137,8 @@ export default function BingoBoard() {
     if (checkDiagonal2()) bingoCount++;
   
     // 이전 빙고 수와 비교하여 증가분만 점수에 반영
-    const bingoDifference = bingoCount - lastBingoCount;
+    const bingoDifference = bingoCount - savedLastBingoCount;
+
     if (bingoDifference !== 0) { //취소 포함
       const currentUser = auth.currentUser;
       if (currentUser) {
@@ -149,6 +154,8 @@ export default function BingoBoard() {
     
           // 캐시된 누적 점수 업데이트
           await AsyncStorage.setItem('cachedTotalScore', newTotalScore.toString());
+          await AsyncStorage.setItem(`lastBingoCount_${bingoSize}`, bingoCount.toString());
+
           console.log('빙고 증가로 점수 업데이트:', {
             이전점수: scoreState.totalScore,
             증가: scoreChange,
@@ -205,6 +212,8 @@ export default function BingoBoard() {
     }
   
     console.log('완료 상태 변경:', taskId);
+
+    //await checkBingo();
   };
 
   const handleLongPress = (id: number, title: string) => {
@@ -333,6 +342,23 @@ export default function BingoBoard() {
   }, []);
 
   useEffect(() => {
+    const checkFirstLaunchOfDay = async () => {
+      const today = getCurrentLocalDate(); // 현재 날짜 가져오기
+      const lastLaunchDate = await AsyncStorage.getItem("lastLaunchDate");
+  
+      if (lastLaunchDate === today) {
+        console.log("오늘 이미 앱이 실행됨, 점수 중복 방지");
+        return;
+      }
+  
+      console.log(" 오늘 처음 실행됨, 점수 정상 처리");
+      await AsyncStorage.setItem("lastLaunchDate", today); // 오늘 실행한 기록 저장
+    };
+  
+    checkFirstLaunchOfDay();
+  }, []);
+
+  useEffect(() => {
     syncBoard();
   }, [tasks, bingoSize]);
 
@@ -344,7 +370,9 @@ export default function BingoBoard() {
 
   // 빙고 체크 
   useEffect(() => {
-    checkBingo();
+    if(bingoBoard.length > 0){
+      checkBingo();
+    }
   }, [bingoBoard]);
 
   useEffect(() => {
