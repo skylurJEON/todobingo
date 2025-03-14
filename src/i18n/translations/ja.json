@@ -36,7 +36,8 @@
       "weak_password": "パスワードは6文字以上である必要があります。",
       "account_exists": "このメールアドレスは既に別の方法で登録されています。",
       "error": "エラー",
-      "input_error": "入力エラー"
+      "input_error": "入力エラー",
+      "name_special_chars": "名前に特殊文字は使用できません。"
     },
     "settings": {
       "title": "設定",

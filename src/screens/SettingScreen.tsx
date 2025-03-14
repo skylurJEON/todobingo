@@ -93,6 +93,15 @@ export default function SettingsScreen() {
       return;
     }
 
+    const specialCharsRegex = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/;
+    if (specialCharsRegex.test(newDisplayName)) {
+      Alert.alert(
+        t('errors.input_error'), 
+        t('errors.name_special_chars')
+      );
+      return;
+    }
+
     try {
       await updateUserProfile(newDisplayName );
       setDisplayName(newDisplayName);

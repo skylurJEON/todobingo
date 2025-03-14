@@ -36,7 +36,8 @@
       "weak_password": "Password must be at least 6 characters.",
       "account_exists": "This email is already registered with a different method.",
       "error": "Error",
-      "input_error": "Input Error"
+      "input_error": "Input Error",
+      "name_special_chars": "Name cannot contain special characters."
     },
     "settings": {
       "title": "Settings",

@@ -69,6 +69,17 @@ export default function LoginScreen({ navigation }: any) {
       return;
     }
 
+    if (isSignUp) {
+      const specialCharsRegex = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]+/;
+      if (specialCharsRegex.test(displayName)) {
+        Alert.alert(
+          t('errors.input_error'), 
+          t('errors.name_special_chars')
+        );
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {

@@ -36,7 +36,8 @@
       "weak_password": "密码至少需要6个字符。",
       "account_exists": "该邮箱已通过其他方式注册。",
       "error": "错误",
-      "input_error": "输入错误"
+      "input_error": "输入错误",
+      "name_special_chars": "姓名不能包含特殊字符。"
     },
     "settings": {
       "title": "设置",
